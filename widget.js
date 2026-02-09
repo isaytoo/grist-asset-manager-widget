@@ -667,10 +667,16 @@ function generateRapportPDF() {
     return;
   }
 
-  // Debug: log first 5 Date_Acte values to understand format
-  var sampleDates = biens.slice(0, 5).map(function(b) { return { raw: b.Date_Acte, type: typeof b.Date_Acte }; });
-  console.log('Date_Acte samples:', JSON.stringify(sampleDates));
-  console.log('Date range:', dateDebut.toISOString(), 'to', dateFin.toISOString());
+  // Debug: log date range and min/max serial values
+  var allSerials = biens.map(function(b) { return parseInt(b.Date_Acte) || 0; }).filter(function(n) { return n > 0; });
+  var minSerial = Math.min.apply(null, allSerials);
+  var maxSerial = Math.max.apply(null, allSerials);
+  var epochExcel = new Date(1899, 11, 30);
+  var minDate = new Date(epochExcel.getTime() + minSerial * 86400000);
+  var maxDate = new Date(epochExcel.getTime() + maxSerial * 86400000);
+  console.log('Date_Acte range: serial ' + minSerial + '-' + maxSerial + ' → ' + minDate.toISOString().split('T')[0] + ' to ' + maxDate.toISOString().split('T')[0]);
+  console.log('Looking for: ' + dateDebut.toISOString().split('T')[0] + ' to ' + dateFin.toISOString().split('T')[0]);
+  console.log('Dec 2025 would need serial ~' + Math.floor((new Date(2025,11,1).getTime() - epochExcel.getTime()) / 86400000));
 
   // Filter biens by date range
   var filtered = biens.filter(function(b) {
