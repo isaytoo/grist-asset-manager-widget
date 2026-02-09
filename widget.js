@@ -407,26 +407,25 @@ function renderSearchView() {
   html += '<p style="color:#64748b;margin-bottom:16px;">' + t('searchSubtitle') + '</p>';
 
   html += '<div class="search-grid">';
-  html += '<div class="search-field"><label>Référence DDC</label><input type="text" id="s-ref" placeholder="Ex: ECH 69389 22 00001" /></div>';
-  html += '<div class="search-field"><label>Commune</label><select id="s-commune"><option value="">' + t('allCommunes') + '</option>';
+  html += '<div class="search-field"><label>Référence DDC</label><input type="text" id="s-ref" placeholder="Ex: ECH 69389 22 00001" oninput="doSearch()" /></div>';
+  html += '<div class="search-field"><label>Commune</label><select id="s-commune" onchange="doSearch()"><option value="">' + t('allCommunes') + '</option>';
   for (var i = 0; i < communes.length; i++) html += '<option value="' + sanitize(communes[i]) + '">' + sanitize(communes[i]) + '</option>';
   html += '</select></div>';
-  html += '<div class="search-field"><label>Mouvement</label><select id="s-mouvement"><option value="">' + t('allMovements') + '</option>';
+  html += '<div class="search-field"><label>Mouvement</label><select id="s-mouvement" onchange="doSearch()"><option value="">' + t('allMovements') + '</option>';
   for (var i = 0; i < mouvements.length; i++) html += '<option value="' + sanitize(mouvements[i]) + '">' + sanitize(mouvements[i]) + '</option>';
   html += '</select></div>';
-  html += '<div class="search-field"><label>Adresse</label><input type="text" id="s-adresse" placeholder="Ex: LA JACQUIERE" /></div>';
-  html += '<div class="search-field"><label>Réf. Parcelle</label><input type="text" id="s-parcelle" /></div>';
-  html += '<div class="search-field"><label>Type de Bien</label><select id="s-type"><option value="">' + t('allTypes') + '</option>';
+  html += '<div class="search-field"><label>Adresse</label><input type="text" id="s-adresse" placeholder="Ex: LA JACQUIERE" oninput="doSearch()" /></div>';
+  html += '<div class="search-field"><label>Réf. Parcelle</label><input type="text" id="s-parcelle" oninput="doSearch()" /></div>';
+  html += '<div class="search-field"><label>Type de Bien</label><select id="s-type" onchange="doSearch()"><option value="">' + t('allTypes') + '</option>';
   for (var i = 0; i < types.length; i++) html += '<option value="' + sanitize(types[i]) + '">' + sanitize(types[i]) + '</option>';
   html += '</select></div>';
-  html += '<div class="search-field"><label>Année</label><select id="s-annee"><option value="">' + t('allYears') + '</option>';
+  html += '<div class="search-field"><label>Année</label><select id="s-annee" onchange="doSearch()"><option value="">' + t('allYears') + '</option>';
   for (var i = 0; i < annees.length; i++) html += '<option value="' + sanitize(annees[i]) + '">' + sanitize(annees[i]) + '</option>';
   html += '</select></div>';
-  html += '<div class="search-field"><label>N° Site</label><input type="text" id="s-site" /></div>';
+  html += '<div class="search-field"><label>N° Site</label><input type="text" id="s-site" oninput="doSearch()" /></div>';
   html += '</div>';
 
   html += '<div class="search-actions">';
-  html += '<button class="btn btn-primary" onclick="doSearch()">🔍 ' + t('searchBtn') + '</button>';
   html += '<button class="btn btn-secondary" onclick="resetSearch()">🔄 ' + t('resetBtn') + '</button>';
   html += '</div>';
   html += '</div>';
@@ -949,26 +948,26 @@ function openEditModal(bienId) {
 // DASHBOARD VIEW
 // =============================================================================
 
-var dashFilterYear = 'all';
-var dashFilterMonth = 'all';
+var dashFilterYears = []; // empty = all years
+var dashFilterMonths = []; // empty = all months
 var dashSurfaceTab = 'analyse'; // 'analyse' or 'details'
 var dashDetailTab = 'acq'; // 'acq', 'ces', 'bati', 'nonbati'
 
 function getFilteredBiens() {
   return biens.filter(function(b) {
-    if (dashFilterYear !== 'all' && String(b.Annee) !== String(dashFilterYear)) return false;
-    if (dashFilterMonth !== 'all') {
+    // Year filter (multi-select)
+    if (dashFilterYears.length > 0 && dashFilterYears.indexOf(String(b.Annee)) === -1) return false;
+    // Month filter (multi-select)
+    if (dashFilterMonths.length > 0) {
       var dateStr = String(b.Date_Acte || '');
       var month = 0;
-      // Try to parse month from date string (various formats)
       var parts = dateStr.split(/[\/\-\.]/);
       if (parts.length >= 2) {
-        // Try MM/DD/YY or DD/MM/YY
         var m = parseInt(parts[0], 10);
         if (m >= 1 && m <= 12) month = m;
         else { m = parseInt(parts[1], 10); if (m >= 1 && m <= 12) month = m; }
       }
-      if (month !== parseInt(dashFilterMonth, 10)) return false;
+      if (dashFilterMonths.indexOf(String(month)) === -1) return false;
     }
     return true;
   });
@@ -1037,24 +1036,24 @@ function renderDashboardView() {
   html += '<div class="section-card" style="margin-top:20px;">';
   html += '<h3>📅 ' + t('dashFilters') + '</h3>';
 
-  // Year pills
+  // Year pills (multi-select)
   html += '<div style="margin-bottom:12px;"><span style="font-size:12px;font-weight:700;color:#64748b;">' + t('dashYear') + '</span>';
   html += '<div class="filter-pills">';
-  html += '<button class="filter-pill' + (dashFilterYear === 'all' ? ' active' : '') + '" onclick="setDashFilter(\'year\',\'all\')">' + t('dashAll') + '</button>';
+  html += '<button class="filter-pill' + (dashFilterYears.length === 0 ? ' active' : '') + '" onclick="toggleDashFilter(\'year\',\'all\')">' + t('dashAll') + '</button>';
   for (var i = 0; i < yearList.length; i++) {
-    html += '<button class="filter-pill' + (dashFilterYear === yearList[i] ? ' active' : '') + '" onclick="setDashFilter(\'year\',\'' + yearList[i] + '\')">' + yearList[i] + '</button>';
+    html += '<button class="filter-pill' + (dashFilterYears.indexOf(yearList[i]) !== -1 ? ' active' : '') + '" onclick="toggleDashFilter(\'year\',\'' + yearList[i] + '\')">' + yearList[i] + '</button>';
   }
   html += '</div></div>';
 
-  // Month pills
+  // Month pills (multi-select)
   var months_fr = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
   var months_en = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   var months = currentLang === 'fr' ? months_fr : months_en;
   html += '<div><span style="font-size:12px;font-weight:700;color:#64748b;">' + t('dashMonth') + '</span>';
   html += '<div class="filter-pills">';
-  html += '<button class="filter-pill' + (dashFilterMonth === 'all' ? ' active' : '') + '" onclick="setDashFilter(\'month\',\'all\')">' + t('dashAll') + '</button>';
+  html += '<button class="filter-pill' + (dashFilterMonths.length === 0 ? ' active' : '') + '" onclick="toggleDashFilter(\'month\',\'all\')">' + t('dashAll') + '</button>';
   for (var i = 0; i < 12; i++) {
-    html += '<button class="filter-pill' + (dashFilterMonth === String(i + 1) ? ' active' : '') + '" onclick="setDashFilter(\'month\',\'' + (i + 1) + '\')">' + months[i] + '</button>';
+    html += '<button class="filter-pill' + (dashFilterMonths.indexOf(String(i + 1)) !== -1 ? ' active' : '') + '" onclick="toggleDashFilter(\'month\',\'' + (i + 1) + '\')">' + months[i] + '</button>';
   }
   html += '</div>';
   html += '<p style="font-size:11px;color:#94a3b8;margin-top:4px;">' + t('dashMonthHint') + '</p>';
@@ -1144,7 +1143,7 @@ function renderDashboardView() {
     html += '</div>';
 
     // 4 detail sub-tabs
-    var yearLabel = dashFilterYear === 'all' ? (currentLang === 'fr' ? 'Toutes années' : 'All years') : dashFilterYear;
+    var yearLabel = dashFilterYears.length === 0 ? (currentLang === 'fr' ? 'Toutes années' : 'All years') : dashFilterYears.join(', ');
     html += '<div class="detail-sub-tabs">';
     html += '<button class="detail-sub-tab' + (dashDetailTab === 'acq' ? ' active' : '') + '" onclick="setDashDetailTab(\'acq\')">Acquisitions (' + detailAcq.length + ')</button>';
     html += '<button class="detail-sub-tab' + (dashDetailTab === 'ces' ? ' active-orange' : '') + '" onclick="setDashDetailTab(\'ces\')">Cessions (' + detailCes.length + ')</button>';
@@ -1225,9 +1224,25 @@ function renderDashboardView() {
   document.getElementById('dashboard-view').innerHTML = html;
 }
 
-function setDashFilter(type, value) {
-  if (type === 'year') dashFilterYear = value;
-  if (type === 'month') dashFilterMonth = value;
+function toggleDashFilter(type, value) {
+  if (type === 'year') {
+    if (value === 'all') {
+      dashFilterYears = [];
+    } else {
+      var idx = dashFilterYears.indexOf(value);
+      if (idx !== -1) dashFilterYears.splice(idx, 1);
+      else dashFilterYears.push(value);
+    }
+  }
+  if (type === 'month') {
+    if (value === 'all') {
+      dashFilterMonths = [];
+    } else {
+      var idx = dashFilterMonths.indexOf(value);
+      if (idx !== -1) dashFilterMonths.splice(idx, 1);
+      else dashFilterMonths.push(value);
+    }
+  }
   renderDashboardView();
 }
 
@@ -1321,7 +1336,7 @@ function exportSurfaceDetails() {
     XLSX.utils.book_append_sheet(wb, makeSheet(window._dashDetailBati || [], 'bati'), 'Bâti');
     XLSX.utils.book_append_sheet(wb, makeSheet(window._dashDetailNonBati || [], 'nonbati'), 'Non Bâti');
 
-    var yearLabel = dashFilterYear === 'all' ? 'Toutes_annees' : dashFilterYear;
+    var yearLabel = dashFilterYears.length === 0 ? 'Toutes_annees' : dashFilterYears.join('_');
     XLSX.writeFile(wb, 'Surfaces_SPI_' + yearLabel + '.xlsx');
     showToast(t('dashExportDone'), 'success');
   } catch (e) {
