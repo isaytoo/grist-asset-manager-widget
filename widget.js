@@ -133,6 +133,9 @@ var i18n = {
     dashGestionSPI: 'Gestion SPI',
     dashTypeActe: "Type d'acte",
     dashSPIEntrants: 'Dont actes pour biens entrants en gestion au SPI',
+    dashDetailTab: 'Détails des surfaces par bien',
+    dashExportExcel: 'Exporter Excel (4 onglets)',
+    dashExportDone: 'Export Excel téléchargé avec succès',
     gestTitle: 'Gestion des Gestionnaires',
     gestSubtitle: 'Désignez les personnes autorisées à gérer les biens (en plus du Owner)',
     gestEmail: 'Email du gestionnaire',
@@ -246,6 +249,9 @@ var i18n = {
     dashGestionSPI: 'SPI Management',
     dashTypeActe: 'Deed type',
     dashSPIEntrants: 'Of which deeds for assets entering SPI management',
+    dashDetailTab: 'Surface details by asset',
+    dashExportExcel: 'Export Excel (4 tabs)',
+    dashExportDone: 'Excel export downloaded successfully',
     gestTitle: 'Manager Management',
     gestSubtitle: 'Designate people authorized to manage assets (in addition to Owner)',
     gestEmail: 'Manager email',
@@ -945,6 +951,8 @@ function openEditModal(bienId) {
 
 var dashFilterYear = 'all';
 var dashFilterMonth = 'all';
+var dashSurfaceTab = 'analyse'; // 'analyse' or 'details'
+var dashDetailTab = 'acq'; // 'acq', 'ces', 'bati', 'nonbati'
 
 function getFilteredBiens() {
   return biens.filter(function(b) {
@@ -1053,42 +1061,113 @@ function renderDashboardView() {
   html += '</div></div>';
 
   // ===== Analyse des Surfaces (Gestion SPI = OUI) =====
+  // Build detail lists for the 4 sub-tabs
+  var detailAcq = [], detailCes = [], detailBati = [], detailNonBati = [];
+  for (var i = 0; i < filtered.length; i++) {
+    var b = filtered[i];
+    var isSPIb = String(b.Gestion_SPI || '').toUpperCase() === 'OUI';
+    if (!isSPIb) continue;
+    var mouvB = String(b.Mouvement || '').toUpperCase();
+    var spB = parseNum(b.Surface_Parcelle);
+    var sbB = parseNum(b.Surface_Bati);
+    var isAcqB = mouvB.indexOf('ACQUISITION') !== -1 || mouvB.indexOf('PREEMPTION') !== -1 || mouvB.indexOf('PRÉEMPTION') !== -1 || mouvB.indexOf('EXPROPRIATION') !== -1 || mouvB.indexOf('SERVITUDE') !== -1;
+    var isCesB = mouvB.indexOf('CESSION') !== -1;
+    if (isAcqB) {
+      detailAcq.push({ ref: b.Reference_DDC, commune: b.Commune, adresse: b.Adresse, type: b.Type_Bien, mouvement: b.Mouvement, surface: spB, date: b.Date_Acte, annee: b.Annee });
+      if (sbB > 0) detailBati.push({ ref: b.Reference_DDC, commune: b.Commune, adresse: b.Adresse, mouvement: b.Mouvement, surface: sbB, date: b.Date_Acte, annee: b.Annee });
+      var nonBatiB = spB - sbB;
+      if (nonBatiB > 0) detailNonBati.push({ ref: b.Reference_DDC, commune: b.Commune, adresse: b.Adresse, mouvement: b.Mouvement, surface: nonBatiB, date: b.Date_Acte, annee: b.Annee });
+    }
+    if (isCesB) {
+      detailCes.push({ ref: b.Reference_DDC, commune: b.Commune, adresse: b.Adresse, type: b.Type_Bien, mouvement: b.Mouvement, surface: spB, date: b.Date_Acte, annee: b.Annee });
+      if (sbB > 0) detailBati.push({ ref: b.Reference_DDC, commune: b.Commune, adresse: b.Adresse, mouvement: b.Mouvement, surface: -sbB, date: b.Date_Acte, annee: b.Annee });
+      var nonBatiC = spB - sbB;
+      if (nonBatiC > 0) detailNonBati.push({ ref: b.Reference_DDC, commune: b.Commune, adresse: b.Adresse, mouvement: b.Mouvement, surface: -nonBatiC, date: b.Date_Acte, annee: b.Annee });
+    }
+  }
+  detailAcq.sort(function(a, b) { return b.surface - a.surface; });
+  detailCes.sort(function(a, b) { return b.surface - a.surface; });
+  detailBati.sort(function(a, b) { return Math.abs(b.surface) - Math.abs(a.surface); });
+  detailNonBati.sort(function(a, b) { return Math.abs(b.surface) - Math.abs(a.surface); });
+
+  // Store for export
+  window._dashDetailAcq = detailAcq;
+  window._dashDetailCes = detailCes;
+  window._dashDetailBati = detailBati;
+  window._dashDetailNonBati = detailNonBati;
+
   html += '<div class="section-card" style="margin-top:20px;">';
   html += '<h3>📊 ' + t('dashSurfaceAnalysis') + ' <span style="font-size:12px;font-weight:400;color:#64748b;">(Gestion SPI = OUI)</span></h3>';
 
-  html += '<div class="analysis-grid">';
-
-  // Left: Surfaces acquises / cédées
-  html += '<div class="analysis-card">';
-  html += '<h4>' + t('dashSurfAcqCed') + '</h4>';
-  var ecart = surfAcquise - surfCedee;
-  html += '<table class="analysis-table"><thead><tr>';
-  html += '<th style="background:#22c55e;">Acquisitions</th>';
-  html += '<th style="background:#ef4444;">Cessions</th>';
-  html += '<th style="background:#dc2626;">Écart</th>';
-  html += '</tr></thead><tbody><tr>';
-  html += '<td style="font-weight:800;color:#22c55e;">' + Math.round(surfAcquise).toLocaleString() + ' m²</td>';
-  html += '<td style="font-weight:800;color:#ef4444;">-' + Math.round(surfCedee).toLocaleString() + ' m²</td>';
-  html += '<td style="font-weight:800;color:#1e293b;">' + Math.round(ecart).toLocaleString() + ' m²</td>';
-  html += '</tr></tbody></table>';
+  // Main sub-tabs: Analyse des Surfaces | Détails des surfaces par bien
+  html += '<div class="sub-tabs">';
+  html += '<button class="sub-tab' + (dashSurfaceTab === 'analyse' ? ' active' : '') + '" onclick="setDashSurfaceTab(\'analyse\')">📊 ' + t('dashSurfaceAnalysis') + '</button>';
+  html += '<button class="sub-tab' + (dashSurfaceTab === 'details' ? ' active-green' : '') + '" onclick="setDashSurfaceTab(\'details\')">📋 ' + t('dashDetailTab') + '</button>';
   html += '</div>';
 
-  // Right: Répartition bâti / non-bâti
-  html += '<div class="analysis-card">';
-  html += '<h4>' + t('dashBatiNonBati') + '</h4>';
-  var totalSurf = surfBatiSPI + surfNonBatiSPI;
-  html += '<table class="analysis-table"><thead><tr>';
-  html += '<th style="background:#3b82f6;">' + t('dashSurfBati') + '</th>';
-  html += '<th style="background:#22c55e;">' + t('dashSurfNonBati') + '</th>';
-  html += '<th style="background:#475569;">Total</th>';
-  html += '</tr></thead><tbody><tr>';
-  html += '<td style="font-weight:800;color:#3b82f6;">' + Math.round(surfBatiSPI).toLocaleString() + ' m²</td>';
-  html += '<td style="font-weight:800;color:#22c55e;">' + Math.round(surfNonBatiSPI).toLocaleString() + ' m²</td>';
-  html += '<td style="font-weight:800;">' + Math.round(totalSurf).toLocaleString() + ' m²</td>';
-  html += '</tr></tbody></table>';
-  html += '</div>';
+  if (dashSurfaceTab === 'analyse') {
+    // Original analysis tables
+    html += '<div class="analysis-grid">';
+    html += '<div class="analysis-card">';
+    html += '<h4>' + t('dashSurfAcqCed') + '</h4>';
+    var ecart = surfAcquise - surfCedee;
+    html += '<table class="analysis-table"><thead><tr>';
+    html += '<th style="background:#22c55e;">Acquisitions</th>';
+    html += '<th style="background:#ef4444;">Cessions</th>';
+    html += '<th style="background:#dc2626;">Écart</th>';
+    html += '</tr></thead><tbody><tr>';
+    html += '<td style="font-weight:800;color:#22c55e;">' + Math.round(surfAcquise).toLocaleString() + ' m²</td>';
+    html += '<td style="font-weight:800;color:#ef4444;">-' + Math.round(surfCedee).toLocaleString() + ' m²</td>';
+    html += '<td style="font-weight:800;color:#1e293b;">' + Math.round(ecart).toLocaleString() + ' m²</td>';
+    html += '</tr></tbody></table>';
+    html += '</div>';
+    html += '<div class="analysis-card">';
+    html += '<h4>' + t('dashBatiNonBati') + '</h4>';
+    var totalSurf = surfBatiSPI + surfNonBatiSPI;
+    html += '<table class="analysis-table"><thead><tr>';
+    html += '<th style="background:#3b82f6;">' + t('dashSurfBati') + '</th>';
+    html += '<th style="background:#22c55e;">' + t('dashSurfNonBati') + '</th>';
+    html += '<th style="background:#475569;">Total</th>';
+    html += '</tr></thead><tbody><tr>';
+    html += '<td style="font-weight:800;color:#3b82f6;">' + Math.round(surfBatiSPI).toLocaleString() + ' m²</td>';
+    html += '<td style="font-weight:800;color:#22c55e;">' + Math.round(surfNonBatiSPI).toLocaleString() + ' m²</td>';
+    html += '<td style="font-weight:800;">' + Math.round(totalSurf).toLocaleString() + ' m²</td>';
+    html += '</tr></tbody></table>';
+    html += '</div>';
+    html += '</div>';
 
-  html += '</div></div>';
+  } else {
+    // Details tab
+    // Export button
+    html += '<div style="text-align:right;margin-bottom:12px;">';
+    html += '<button class="btn-export" onclick="exportSurfaceDetails()">⬇ ' + t('dashExportExcel') + '</button>';
+    html += '</div>';
+
+    // 4 detail sub-tabs
+    var yearLabel = dashFilterYear === 'all' ? (currentLang === 'fr' ? 'Toutes années' : 'All years') : dashFilterYear;
+    html += '<div class="detail-sub-tabs">';
+    html += '<button class="detail-sub-tab' + (dashDetailTab === 'acq' ? ' active' : '') + '" onclick="setDashDetailTab(\'acq\')">Acquisitions (' + detailAcq.length + ')</button>';
+    html += '<button class="detail-sub-tab' + (dashDetailTab === 'ces' ? ' active-orange' : '') + '" onclick="setDashDetailTab(\'ces\')">Cessions (' + detailCes.length + ')</button>';
+    html += '<button class="detail-sub-tab' + (dashDetailTab === 'bati' ? ' active-blue' : '') + '" onclick="setDashDetailTab(\'bati\')">Bâti (' + detailBati.length + ')</button>';
+    html += '<button class="detail-sub-tab' + (dashDetailTab === 'nonbati' ? ' active-dark' : '') + '" onclick="setDashDetailTab(\'nonbati\')">Non Bâti (' + detailNonBati.length + ')</button>';
+    html += '</div>';
+
+    if (dashDetailTab === 'acq') {
+      html += '<h4 style="margin-bottom:12px;">Acquisitions - ' + yearLabel + '</h4>';
+      html += buildDetailTable(detailAcq, 'acq');
+    } else if (dashDetailTab === 'ces') {
+      html += '<h4 style="margin-bottom:12px;">Cessions - ' + yearLabel + '</h4>';
+      html += buildDetailTable(detailCes, 'ces');
+    } else if (dashDetailTab === 'bati') {
+      html += '<h4 style="margin-bottom:12px;">Bâti - ' + yearLabel + '</h4>';
+      html += buildDetailTable(detailBati, 'bati');
+    } else if (dashDetailTab === 'nonbati') {
+      html += '<h4 style="margin-bottom:12px;">Non Bâti - ' + yearLabel + '</h4>';
+      html += buildDetailTable(detailNonBati, 'nonbati');
+    }
+  }
+
+  html += '</div>';
 
   // ===== Gestion SPI =====
   html += '<div class="section-card" style="margin-top:20px;">';
@@ -1150,6 +1229,105 @@ function setDashFilter(type, value) {
   if (type === 'year') dashFilterYear = value;
   if (type === 'month') dashFilterMonth = value;
   renderDashboardView();
+}
+
+function setDashSurfaceTab(tab) {
+  dashSurfaceTab = tab;
+  renderDashboardView();
+}
+
+function setDashDetailTab(tab) {
+  dashDetailTab = tab;
+  renderDashboardView();
+}
+
+function buildDetailTable(rows, type) {
+  var hasType = (type === 'acq' || type === 'ces');
+  var headClass = type === 'acq' ? 'green-head' : type === 'ces' ? 'orange-head' : type === 'bati' ? 'blue-head' : 'dark-head';
+  var surfLabel = type === 'bati' ? 'Surface Bâti (m²)' : type === 'nonbati' ? 'Surface Non Bâti (m²)' : 'Surface Parcelle (m²)';
+
+  var html = '<div style="max-height:500px;overflow:auto;">';
+  html += '<table class="detail-table"><thead class="' + headClass + '"><tr>';
+  html += '<th>Référence DDC</th><th>Commune</th><th>Adresse</th>';
+  if (hasType) html += '<th>Type</th>';
+  html += '<th>Mouvement</th><th>' + surfLabel + '</th><th>Date de l\'acte</th><th>Année</th>';
+  html += '</tr></thead><tbody>';
+
+  var totalSurf = 0;
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    totalSurf += r.surface;
+    var valClass = r.surface >= 0 ? 'val-positive' : 'val-negative';
+    html += '<tr>';
+    html += '<td>' + sanitize(r.ref) + '</td>';
+    html += '<td>' + sanitize(r.commune) + '</td>';
+    html += '<td>' + sanitize(r.adresse) + '</td>';
+    if (hasType) html += '<td>' + sanitize(r.type || '') + '</td>';
+    html += '<td>' + movementBadge(r.mouvement) + '</td>';
+    html += '<td class="' + valClass + '">' + Math.round(r.surface).toLocaleString() + '</td>';
+    html += '<td>' + sanitize(r.date) + '</td>';
+    html += '<td>' + sanitize(r.annee) + '</td>';
+    html += '</tr>';
+  }
+  html += '</tbody>';
+
+  // Footer with total
+  html += '<tfoot><tr>';
+  html += '<td colspan="' + (hasType ? 5 : 4) + '" style="text-align:right;">Total :</td>';
+  var totalClass = totalSurf >= 0 ? 'val-positive' : 'val-negative';
+  html += '<td class="' + totalClass + '">' + Math.round(totalSurf).toLocaleString() + '</td>';
+  html += '<td colspan="2"></td>';
+  html += '</tr></tfoot>';
+
+  html += '</table></div>';
+  return html;
+}
+
+function exportSurfaceDetails() {
+  try {
+    var wb = XLSX.utils.book_new();
+
+    // Helper to build sheet data
+    function makeSheet(rows, type) {
+      var hasType = (type === 'acq' || type === 'ces');
+      var surfLabel = type === 'bati' ? 'Surface Bâti (m²)' : type === 'nonbati' ? 'Surface Non Bâti (m²)' : 'Surface Parcelle (m²)';
+      var headers = ['Référence DDC', 'Commune', 'Adresse'];
+      if (hasType) headers.push('Type');
+      headers.push('Mouvement', surfLabel, "Date de l'acte", 'Année');
+
+      var data = [headers];
+      var totalSurf = 0;
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        totalSurf += r.surface;
+        var row = [r.ref || '', r.commune || '', r.adresse || ''];
+        if (hasType) row.push(r.type || '');
+        row.push(r.mouvement || '', Math.round(r.surface), r.date || '', r.annee || '');
+        data.push(row);
+      }
+      // Total row
+      var totalRow = [];
+      for (var j = 0; j < headers.length; j++) totalRow.push('');
+      totalRow[0] = 'Total';
+      var surfIdx = hasType ? 5 : 4;
+      totalRow[surfIdx] = Math.round(totalSurf);
+      data.push(totalRow);
+
+      return XLSX.utils.aoa_to_sheet(data);
+    }
+
+    XLSX.utils.book_append_sheet(wb, makeSheet(window._dashDetailAcq || [], 'acq'), 'Acquisitions');
+    XLSX.utils.book_append_sheet(wb, makeSheet(window._dashDetailCes || [], 'ces'), 'Cessions');
+    XLSX.utils.book_append_sheet(wb, makeSheet(window._dashDetailBati || [], 'bati'), 'Bâti');
+    XLSX.utils.book_append_sheet(wb, makeSheet(window._dashDetailNonBati || [], 'nonbati'), 'Non Bâti');
+
+    var yearLabel = dashFilterYear === 'all' ? 'Toutes_annees' : dashFilterYear;
+    XLSX.writeFile(wb, 'Surfaces_SPI_' + yearLabel + '.xlsx');
+    showToast(t('dashExportDone'), 'success');
+  } catch (e) {
+    console.error('Export error:', e);
+    showToast('Erreur export: ' + e.message, 'error');
+  }
 }
 
 // =============================================================================

@@ -198,7 +198,37 @@
     .analysis-table td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; }
     .analysis-table tr:last-child td { font-weight: 800; background: #f8fafc; }
     .spi-table th { background: #1e40af; }
-    @media (max-width: 768px) { .analysis-grid { grid-template-columns: 1fr; } }
+    /* Sub-tabs for dashboard sections */
+    .sub-tabs { display: flex; gap: 0; margin-bottom: 16px; }
+    .sub-tab { padding: 10px 20px; font-size: 13px; font-weight: 700; color: #64748b; background: #f1f5f9; border: none; cursor: pointer; transition: all .2s; display: flex; align-items: center; gap: 6px; }
+    .sub-tab:first-child { border-radius: 8px 0 0 8px; }
+    .sub-tab:last-child { border-radius: 0 8px 8px 0; }
+    .sub-tab.active { background: #475569; color: #fff; }
+    .sub-tab.active-green { background: #22c55e; color: #fff; }
+    .sub-tab.active-blue { background: #3b82f6; color: #fff; }
+    .sub-tab.active-orange { background: #d97706; color: #fff; }
+    .sub-tab.active-dark { background: #1e293b; color: #fff; }
+    .detail-sub-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .detail-sub-tab { padding: 8px 16px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 2px solid #e2e8f0; background: #fff; color: #475569; cursor: pointer; transition: all .2s; }
+    .detail-sub-tab:hover { border-color: #22c55e; }
+    .detail-sub-tab.active { background: #22c55e; color: #fff; border-color: #22c55e; }
+    .detail-sub-tab.active-orange { background: #d97706; color: #fff; border-color: #d97706; }
+    .detail-sub-tab.active-blue { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+    .detail-sub-tab.active-dark { background: #1e293b; color: #fff; border-color: #1e293b; }
+    .detail-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .detail-table thead th { padding: 10px 8px; text-align: left; font-weight: 700; font-size: 11px; color: #fff; }
+    .detail-table thead.green-head th { background: #22c55e; }
+    .detail-table thead.orange-head th { background: #d97706; }
+    .detail-table thead.blue-head th { background: #3b82f6; }
+    .detail-table thead.dark-head th { background: #1e293b; }
+    .detail-table td { padding: 8px; border-bottom: 1px solid #f1f5f9; }
+    .detail-table tbody tr:hover { background: #f8fafc; }
+    .detail-table .val-positive { font-weight: 800; color: #22c55e; }
+    .detail-table .val-negative { font-weight: 800; color: #ef4444; }
+    .detail-table tfoot td { font-weight: 800; background: #f1f5f9; border-top: 2px solid #e2e8f0; }
+    .btn-export { background: #22c55e; color: #fff; padding: 8px 18px; border-radius: 8px; font-weight: 700; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+    .btn-export:hover { background: #16a34a; }
+    @media (max-width: 768px) { .analysis-grid { grid-template-columns: 1fr; } .sub-tabs { flex-wrap: wrap; } .detail-sub-tabs { gap: 4px; } }
 
     /* ========== IMPORT / DROP ZONE ========== */
     .drop-zone { border: 3px dashed #e2e8f0; border-radius: 16px; padding: 50px 30px; text-align: center; transition: all .3s; cursor: pointer; background: #fafbfc; }
