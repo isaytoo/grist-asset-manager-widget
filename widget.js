@@ -2402,48 +2402,22 @@ if (!isInsideGrist()) {
   (async function() {
     await grist.ready({ requiredAccess: 'full' });
 
-    // Detect owner via REST /access endpoint.
-    // In Grist "View As" mode, /access returns 403 for non-owners (editors/viewers)
-    // even though the widget token is the Owner's. This is the ONLY reliable method.
-    // Fallback to _grist_ACLRules only if /access itself is unreachable (network/token error).
+    // Detect owner/manager permissions.
+    // On self-hosted Grist, the widget token always has Owner privileges,
+    // so REST /access and fetchTable('_grist_ACLRules') always succeed.
+    // The ONLY reliable test is applyUserActions([]) which respects "View As":
+    //   - Owner/Editor: succeeds (can write)
+    //   - Viewer: fails ("Only owners or editors can modify documents")
+    // We treat Owner+Editor the same (isOwner=true) since only the Owner can
+    // grant "full" access to the widget. Fine-grained control uses the
+    // Gestionnaires system built into the widget.
     try {
-      var tokenResult = await grist.docApi.getAccessToken({ readOnly: true });
-      var accessUrl = tokenResult.baseUrl + '/access?auth=' + tokenResult.token;
-      console.log('Checking /access endpoint...');
-      var accessResp = await fetch(accessUrl);
-      console.log('/access response status:', accessResp.status);
-
-      if (accessResp.ok) {
-        // /access succeeded - parse to confirm owner role
-        var accessData = await accessResp.json();
-        isOwner = true; // Only owners can call /access
-        // Double-check with isSelf if available
-        if (accessData.users && Array.isArray(accessData.users)) {
-          for (var u = 0; u < accessData.users.length; u++) {
-            if (accessData.users[u].isSelf) {
-              var role = (accessData.users[u].access || '').toLowerCase();
-              console.log('Current user role (isSelf):', role);
-              isOwner = (role === 'owners' || role === 'owner');
-              break;
-            }
-          }
-        }
-        console.log('Owner detected via /access');
-      } else if (accessResp.status === 403) {
-        // 403 = user is NOT owner (editor or viewer in "View As" mode)
-        isOwner = false;
-        console.log('Not owner: /access returned 403');
-      } else {
-        // Other HTTP error - unexpected, fallback
-        console.log('/access returned unexpected status:', accessResp.status);
-        isOwner = true; // Widget has full access = owner configured it
-      }
-    } catch (e) {
-      // getAccessToken or fetch failed entirely (network error, no token support)
-      // This happens on some self-hosted Grist versions without token support
-      console.log('Owner detection via /access failed:', e.message);
-      // Fallback: only owners can grant full access to widgets
+      await grist.docApi.applyUserActions([]);
       isOwner = true;
+      console.log('User can write → isOwner: true');
+    } catch (e) {
+      isOwner = false;
+      console.log('User cannot write → isOwner: false (' + e.message + ')');
     }
     console.log('isOwner:', isOwner);
 
