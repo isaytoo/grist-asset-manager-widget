@@ -16,6 +16,7 @@ var searchPageSize = 20;
 var searchResults = [];
 var sortCol = '';
 var sortDir = 'asc';
+var searchSubTab = 'classique';
 
 // Column definitions for BM_Biens
 var BIEN_COLUMNS = [
@@ -411,16 +412,64 @@ function getUniqueValues(field) {
   return Object.keys(vals).sort();
 }
 
+function setSearchSubTab(tab) {
+  searchSubTab = tab;
+  renderSearchView();
+}
+
 function renderSearchView() {
+  var html = '<div class="section-card">';
+  html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">';
+  html += '<div style="width:48px;height:48px;background:#fef2f2;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;">🔍</div>';
+  html += '<div><h3 style="margin:0;">' + t('searchTitle') + '</h3>';
+  html += '<p style="color:#64748b;margin:0;">' + t('searchSubtitle') + '</p></div>';
+  html += '</div>';
+
+  // Sub-tabs
+  html += '<div class="search-sub-tabs">';
+  html += '<button class="search-sub-tab' + (searchSubTab === 'classique' ? ' active' : '') + '" onclick="setSearchSubTab(\'classique\')">🔍 Recherche Classique</button>';
+  html += '<button class="search-sub-tab' + (searchSubTab === 'ia' ? ' active' : '') + '" onclick="setSearchSubTab(\'ia\')">🤖 Recherche Intelligente (IA)</button>';
+  html += '<button class="search-sub-tab' + (searchSubTab === 'geo' ? ' active' : '') + '" onclick="setSearchSubTab(\'geo\')">📍 Recherche Géographique</button>';
+  html += '<button class="search-sub-tab' + (searchSubTab === 'rapport' ? ' active' : '') + '" onclick="setSearchSubTab(\'rapport\')">📄 Rapport</button>';
+  html += '</div>';
+
+  if (searchSubTab === 'classique') {
+    html += renderClassicSearch();
+  } else if (searchSubTab === 'ia') {
+    html += '<div style="text-align:center;padding:60px 20px;color:#94a3b8;">';
+    html += '<div style="font-size:48px;margin-bottom:12px;">🤖</div>';
+    html += '<h4 style="color:#475569;">Recherche Intelligente (IA)</h4>';
+    html += '<p>Fonctionnalité à venir - Recherche en langage naturel avec IA</p>';
+    html += '</div>';
+  } else if (searchSubTab === 'geo') {
+    html += '<div style="text-align:center;padding:60px 20px;color:#94a3b8;">';
+    html += '<div style="font-size:48px;margin-bottom:12px;">📍</div>';
+    html += '<h4 style="color:#475569;">Recherche Géographique</h4>';
+    html += '<p>Fonctionnalité à venir - Recherche sur carte interactive</p>';
+    html += '</div>';
+  } else if (searchSubTab === 'rapport') {
+    html += renderRapportView();
+  }
+
+  html += '</div>';
+
+  // Results (only for classic search)
+  if (searchSubTab === 'classique') {
+    html += '<div id="search-results"></div>';
+  }
+
+  document.getElementById('search-view').innerHTML = html;
+
+  if (searchSubTab === 'classique') doSearch();
+}
+
+function renderClassicSearch() {
   var communes = getUniqueValues('Commune');
   var mouvements = getUniqueValues('Mouvement');
   var types = getUniqueValues('Type_Bien');
   var annees = getUniqueValues('Annee').sort(function(a, b) { return b - a; });
 
-  var html = '<div class="section-card">';
-  html += '<h3>🔍 ' + t('searchTitle') + '</h3>';
-  html += '<p style="color:#64748b;margin-bottom:16px;">' + t('searchSubtitle') + '</p>';
-
+  var html = '';
   html += '<div class="search-grid">';
   html += '<div class="search-field"><label>Référence DDC</label><input type="text" id="s-ref" placeholder="Ex: ECH 69389 22 00001" oninput="doSearch()" /></div>';
   html += '<div class="search-field"><label>Commune</label><select id="s-commune" onchange="doSearch()"><option value="">' + t('allCommunes') + '</option>';
@@ -443,15 +492,331 @@ function renderSearchView() {
   html += '<div class="search-actions">';
   html += '<button class="btn btn-secondary" onclick="resetSearch()">🔄 ' + t('resetBtn') + '</button>';
   html += '</div>';
+
+  return html;
+}
+
+function renderRapportView() {
+  var html = '<div class="rapport-form">';
+  html += '<h4 style="font-size:15px;font-weight:800;margin-bottom:16px;">Export PDF - Mouvements Patrimoine</h4>';
+
+  html += '<div class="rapport-dates">';
+  html += '<div><label>📅 Date de début</label><input type="date" id="rapport-date-debut" /></div>';
+  html += '<div><label>📅 Date de fin</label><input type="date" id="rapport-date-fin" /></div>';
   html += '</div>';
 
-  // Results
-  html += '<div id="search-results"></div>';
+  html += '<button class="rapport-btn" onclick="generateRapportPDF()">📄 Générer le PDF (A2 Paysage)</button>';
 
-  document.getElementById('search-view').innerHTML = html;
+  html += '<div class="rapport-info">';
+  html += '<h5>📋 Contenu du PDF :</h5>';
+  html += '<ul>';
+  html += '<li>Logo Métropole (ratio préservé) et titre "Mouvements Patrimoine"</li>';
+  html += '<li>Regroupement par date d\'acte</li>';
+  html += '<li>Tri alphabétique des communes</li>';
+  html += '<li>Mouvements en couleur (🟢 Acquisition, 🔴 Cession, 🔵 Servitude, 🟣 Préemption)</li>';
+  html += '<li>25 colonnes avec tous les champs (surfaces, occupation, jouissance, etc.)</li>';
+  html += '<li>Format A2 paysage (594x420mm) pour texte complet</li>';
+  html += '<li>Plusieurs biens par page (optimisation espace)</li>';
+  html += '</ul>';
+  html += '</div>';
 
-  // Auto-show all results
-  doSearch();
+  html += '</div>';
+  return html;
+}
+
+function parseDateFR(str) {
+  if (!str) return null;
+  str = String(str).trim();
+  // Try ISO format (yyyy-mm-dd) from date input
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return new Date(str + 'T00:00:00');
+  // Try dd/mm/yyyy
+  var parts = str.split('/');
+  if (parts.length === 3) return new Date(parts[2] + '-' + parts[1] + '-' + parts[0] + 'T00:00:00');
+  return null;
+}
+
+function formatDateFR(d) {
+  if (!d) return '';
+  var dd = String(d.getDate()).padStart(2, '0');
+  var mm = String(d.getMonth() + 1).padStart(2, '0');
+  var yyyy = d.getFullYear();
+  return dd + '/' + mm + '/' + yyyy;
+}
+
+function generateRapportPDF() {
+  var dateDebutEl = document.getElementById('rapport-date-debut');
+  var dateFinEl = document.getElementById('rapport-date-fin');
+  if (!dateDebutEl || !dateFinEl || !dateDebutEl.value || !dateFinEl.value) {
+    showToast('Veuillez saisir les dates de début et de fin', 'error');
+    return;
+  }
+
+  var dateDebut = new Date(dateDebutEl.value + 'T00:00:00');
+  var dateFin = new Date(dateFinEl.value + 'T23:59:59');
+
+  if (isNaN(dateDebut.getTime()) || isNaN(dateFin.getTime())) {
+    showToast('Dates invalides', 'error');
+    return;
+  }
+
+  // Filter biens by date range
+  var filtered = biens.filter(function(b) {
+    var d = parseDateFR(b.Date_Acte);
+    if (!d) return false;
+    return d >= dateDebut && d <= dateFin;
+  });
+
+  if (filtered.length === 0) {
+    showToast('Aucun bien trouvé pour cette période', 'error');
+    return;
+  }
+
+  // Group by Date_Acte, then sort communes alphabetically within each group
+  var groups = {};
+  for (var i = 0; i < filtered.length; i++) {
+    var dateKey = filtered[i].Date_Acte || 'Sans date';
+    if (!groups[dateKey]) groups[dateKey] = [];
+    groups[dateKey].push(filtered[i]);
+  }
+
+  // Sort groups by parsed date
+  var sortedDateKeys = Object.keys(groups).sort(function(a, b) {
+    var da = parseDateFR(a);
+    var db = parseDateFR(b);
+    if (!da) return 1;
+    if (!db) return -1;
+    return da - db;
+  });
+
+  // Sort biens within each group by commune alphabetically
+  for (var k = 0; k < sortedDateKeys.length; k++) {
+    groups[sortedDateKeys[k]].sort(function(a, b) {
+      return (a.Commune || '').localeCompare(b.Commune || '');
+    });
+  }
+
+  // PDF columns definition (25 columns)
+  var pdfCols = [
+    { header: 'Commune', field: 'Commune', width: 28 },
+    { header: 'Mouvement', field: 'Mouvement', width: 24 },
+    { header: 'Référence DDC', field: 'Reference_DDC', width: 32 },
+    { header: 'Adresse', field: 'Adresse', width: 42 },
+    { header: 'Parcelles', field: 'Ref_Parcelles', width: 28 },
+    { header: 'Type de Bien', field: 'Type_Bien', width: 22 },
+    { header: 'Surf. Bâti', field: 'Surface_Bati', width: 16 },
+    { header: 'Surf. Non Bâti', field: 'Surface_Parcelle', width: 18 },
+    { header: 'Surf. Parcelle', field: 'Surface_Parcelle', width: 18 },
+    { header: 'Surf. Assurance', field: 'Surface_Assurance', width: 18 },
+    { header: 'Gestion SPI', field: 'Gestion_SPI', width: 16 },
+    { header: 'Nom OFA', field: 'Nom_OFA_OFT', width: 22 },
+    { header: 'Nouvelle Copropriété', field: 'Nouvelle_Copropriete', width: 18 },
+    { header: 'Occupation', field: 'Occupation', width: 16 },
+    { header: 'Jouissance Anticipée', field: 'Jouissance_Anticipee', width: 18 },
+    { header: 'Jouissance Différée', field: 'Jouissance_Differee', width: 18 },
+    { header: 'Temps Portage (ans)', field: 'Temps_Portage', width: 18 },
+    { header: 'Bail Longue Durée', field: 'Bail_Longue_Duree', width: 18 },
+    { header: 'Acquisition Compte Tiers', field: 'Acquisition_Compte_Tiers', width: 18 },
+    { header: 'Préfinancement', field: 'Prefinancement', width: 18 },
+    { header: 'Tiers Vendeur/Acquéreur', field: 'Tiers_Vendeur_Acquereur', width: 30 },
+    { header: 'Nature du Bien', field: 'Nature_Bien', width: 50 },
+    { header: 'Dossier', field: 'Dossier_Numerique', width: 16 },
+    { header: 'Observations', field: 'Observation', width: 50 }
+  ];
+
+  // Create PDF - A2 landscape (594 x 420 mm)
+  var jsPDF = window.jspdf.jsPDF;
+  var doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [594, 420] });
+
+  var pageW = 594;
+  var pageH = 420;
+  var marginLeft = 10;
+  var marginRight = 10;
+  var marginTop = 10;
+  var usableW = pageW - marginLeft - marginRight;
+
+  // Period string
+  var periodStr = formatDateFR(dateDebut) + ' - ' + formatDateFR(dateFin);
+
+  // ===== HEADER =====
+  // Title
+  doc.setFontSize(22);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(30, 41, 59);
+  doc.text('Mouvements Patrimoine', marginLeft, 20);
+
+  // Period
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100, 116, 139);
+  doc.text('Période : ' + periodStr, marginLeft, 28);
+
+  // Total count
+  doc.setFontSize(10);
+  doc.text(filtered.length + ' bien(s) trouvé(s)', marginLeft, 34);
+
+  // Movement color legend
+  var legendY = 20;
+  var legendX = pageW - marginRight - 200;
+  doc.setFontSize(8);
+  var legends = [
+    { label: 'Acquisition', color: [34, 197, 94] },
+    { label: 'Cession', color: [239, 68, 68] },
+    { label: 'Servitude', color: [37, 99, 235] },
+    { label: 'Préemption', color: [147, 51, 234] },
+    { label: 'Échange', color: [217, 119, 6] },
+    { label: 'Expropriation', color: [219, 39, 119] }
+  ];
+  for (var lg = 0; lg < legends.length; lg++) {
+    doc.setFillColor(legends[lg].color[0], legends[lg].color[1], legends[lg].color[2]);
+    doc.rect(legendX + lg * 32, legendY - 3, 4, 4, 'F');
+    doc.setTextColor(30, 41, 59);
+    doc.text(legends[lg].label, legendX + lg * 32 + 6, legendY);
+  }
+
+  var startY = 40;
+
+  // Movement color mapping
+  function getMvtColor(mouvement) {
+    if (!mouvement) return [100, 116, 139];
+    var m = mouvement.toUpperCase().trim();
+    if (m.indexOf('ACQUISITION') !== -1) return [34, 197, 94];
+    if (m.indexOf('CESSION') !== -1) return [239, 68, 68];
+    if (m.indexOf('SERVITUDE') !== -1) return [37, 99, 235];
+    if (m.indexOf('PREEMPTION') !== -1 || m.indexOf('PRÉEMPTION') !== -1) return [147, 51, 234];
+    if (m.indexOf('ECHANGE') !== -1 || m.indexOf('ÉCHANGE') !== -1) return [217, 119, 6];
+    if (m.indexOf('EXPROPRIATION') !== -1) return [219, 39, 119];
+    if (m.indexOf('LIBERATION') !== -1 || m.indexOf('LIBÉRATION') !== -1) return [2, 132, 199];
+    return [100, 116, 139];
+  }
+
+  // Build table data grouped by date
+  var tableHead = [pdfCols.map(function(c) { return c.header; })];
+  var tableBody = [];
+
+  for (var g = 0; g < sortedDateKeys.length; g++) {
+    var dateStr = sortedDateKeys[g];
+    var groupBiens = groups[dateStr];
+
+    // Date group header row
+    var groupHeaderRow = new Array(pdfCols.length).fill('');
+    groupHeaderRow[0] = 'Date d\'acte : ' + dateStr + ' (' + groupBiens.length + ' bien' + (groupBiens.length > 1 ? 's' : '') + ')';
+    tableBody.push({ _isGroupHeader: true, _cells: groupHeaderRow });
+
+    // Data rows
+    for (var b = 0; b < groupBiens.length; b++) {
+      var bien = groupBiens[b];
+      var row = [];
+      for (var c = 0; c < pdfCols.length; c++) {
+        var val = bien[pdfCols[c].field];
+        row.push(val != null ? String(val) : '');
+      }
+      tableBody.push({ _isGroupHeader: false, _cells: row, _mouvement: bien.Mouvement });
+    }
+  }
+
+  // Column styles with widths
+  var colStyles = {};
+  for (var cs = 0; cs < pdfCols.length; cs++) {
+    colStyles[cs] = { cellWidth: pdfCols[cs].width };
+  }
+
+  // Generate autoTable
+  doc.autoTable({
+    head: tableHead,
+    body: tableBody.map(function(r) { return r._cells; }),
+    startY: startY,
+    margin: { left: marginLeft, right: marginRight, top: 40, bottom: 10 },
+    styles: {
+      fontSize: 6,
+      cellPadding: 1.5,
+      overflow: 'linebreak',
+      lineColor: [226, 232, 240],
+      lineWidth: 0.2,
+      valign: 'top'
+    },
+    headStyles: {
+      fillColor: [30, 41, 59],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 6,
+      cellPadding: 2,
+      halign: 'center'
+    },
+    columnStyles: colStyles,
+    didParseCell: function(data) {
+      if (data.section === 'body') {
+        var rowData = tableBody[data.row];
+        if (rowData && rowData._isGroupHeader) {
+          data.cell.styles.fillColor = [241, 245, 249];
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fontSize = 7;
+          data.cell.styles.textColor = [30, 41, 59];
+          if (data.column.index > 0) {
+            data.cell.text = [''];
+          }
+          if (data.column.index === 0) {
+            data.cell.colSpan = pdfCols.length;
+          }
+        } else if (rowData && !rowData._isGroupHeader) {
+          // Color the Mouvement column (index 1)
+          if (data.column.index === 1) {
+            var mvtColor = getMvtColor(rowData._mouvement);
+            data.cell.styles.textColor = mvtColor;
+            data.cell.styles.fontStyle = 'bold';
+          }
+        }
+      }
+    },
+    didDrawPage: function(data) {
+      // Footer with page number
+      var pageCount = doc.internal.getNumberOfPages();
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184);
+      doc.text(
+        'Page ' + data.pageNumber + ' / ' + pageCount,
+        pageW / 2, pageH - 5,
+        { align: 'center' }
+      );
+      // Repeat header on new pages
+      if (data.pageNumber > 1) {
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(30, 41, 59);
+        doc.text('Mouvements Patrimoine', marginLeft, 15);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 116, 139);
+        doc.text('Période : ' + periodStr, marginLeft, 21);
+      }
+    }
+  });
+
+  // Update page count in footer
+  var totalPages = doc.internal.getNumberOfPages();
+  for (var p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    // Clear previous footer text area
+    doc.setFillColor(255, 255, 255);
+    doc.rect(0, pageH - 10, pageW, 10, 'F');
+    doc.text(
+      'Page ' + p + ' / ' + totalPages,
+      pageW / 2, pageH - 5,
+      { align: 'center' }
+    );
+    // Date of generation
+    doc.text(
+      'Généré le ' + formatDateFR(new Date()),
+      pageW - marginRight, pageH - 5,
+      { align: 'right' }
+    );
+  }
+
+  // Save
+  var fileName = 'Mouvements_Patrimoine_' + dateDebutEl.value + '_' + dateFinEl.value + '.pdf';
+  doc.save(fileName);
+  showToast('PDF généré avec succès (' + filtered.length + ' biens)', 'success');
 }
 
 function doSearch() {
