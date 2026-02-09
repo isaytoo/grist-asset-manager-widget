@@ -998,6 +998,60 @@ function getFilteredBiens() {
   });
 }
 
+function buildPieChart(slices, size) {
+  // slices = [{value, color, label}], size = diameter in px
+  var total = 0;
+  for (var i = 0; i < slices.length; i++) total += Math.abs(slices[i].value);
+  if (total === 0) return '<div style="width:' + size + 'px;height:' + size + 'px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:13px;">Aucune donnée</div>';
+
+  var r = size / 2;
+  var cx = r, cy = r;
+  var svg = '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">';
+
+  var startAngle = -Math.PI / 2;
+  for (var i = 0; i < slices.length; i++) {
+    var pct = Math.abs(slices[i].value) / total;
+    var angle = pct * 2 * Math.PI;
+    var endAngle = startAngle + angle;
+    var largeArc = angle > Math.PI ? 1 : 0;
+
+    var x1 = cx + (r - 4) * Math.cos(startAngle);
+    var y1 = cy + (r - 4) * Math.sin(startAngle);
+    var x2 = cx + (r - 4) * Math.cos(endAngle);
+    var y2 = cy + (r - 4) * Math.sin(endAngle);
+
+    if (slices.length === 1) {
+      svg += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (r - 4) + '" fill="' + slices[i].color + '" />';
+    } else {
+      svg += '<path d="M ' + cx + ' ' + cy + ' L ' + x1 + ' ' + y1 + ' A ' + (r - 4) + ' ' + (r - 4) + ' 0 ' + largeArc + ' 1 ' + x2 + ' ' + y2 + ' Z" fill="' + slices[i].color + '" />';
+    }
+
+    // Label in the middle of the slice
+    var midAngle = startAngle + angle / 2;
+    var labelR = (r - 4) * 0.6;
+    var lx = cx + labelR * Math.cos(midAngle);
+    var ly = cy + labelR * Math.sin(midAngle);
+    var labelVal = Math.round(Math.abs(slices[i].value)).toLocaleString() + ' m²';
+    if (pct > 0.05) {
+      svg += '<text x="' + lx + '" y="' + ly + '" text-anchor="middle" dominant-baseline="central" fill="#fff" font-size="' + (size > 180 ? 12 : 10) + '" font-weight="800">' + labelVal + '</text>';
+    }
+
+    startAngle = endAngle;
+  }
+  svg += '</svg>';
+
+  // Legend
+  var legend = '<div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:8px;">';
+  for (var i = 0; i < slices.length; i++) {
+    legend += '<div style="display:flex;align-items:center;gap:4px;font-size:11px;color:#475569;">';
+    legend += '<span style="width:12px;height:12px;border-radius:3px;background:' + slices[i].color + ';display:inline-block;"></span>';
+    legend += slices[i].label + '</div>';
+  }
+  legend += '</div>';
+
+  return '<div style="display:flex;flex-direction:column;align-items:center;">' + svg + legend + '</div>';
+}
+
 function renderDashboardView() {
   var allYears = {};
   for (var i = 0; i < biens.length; i++) {
@@ -1030,17 +1084,15 @@ function renderDashboardView() {
 
     var mouv = String(b.Mouvement || '').toUpperCase();
     var isSPI = String(b.Gestion_SPI || '').toUpperCase() === 'OUI';
-    var isAcq = mouv.indexOf('ACQUISITION') !== -1 || mouv.indexOf('PREEMPTION') !== -1 || mouv.indexOf('PRÉEMPTION') !== -1;
+    var isAcq = mouv.indexOf('ACQUISITION') !== -1 || mouv.indexOf('PREEMPTION') !== -1 || mouv.indexOf('PRÉEMPTION') !== -1 || mouv.indexOf('EXPROPRIATION') !== -1 || mouv.indexOf('SERVITUDE') !== -1;
     var isCes = mouv.indexOf('CESSION') !== -1;
 
     if (isAcq) {
-      surfAcquise += sp;
-      if (isSPI) { spiAcq++; surfBatiSPI += sb; surfNonBatiSPI += (sp - sb); }
+      if (isSPI) { spiAcq++; surfAcquise += sp; surfBatiSPI += sb; surfNonBatiSPI += Math.max(0, sp - sb); }
       else noSpiAcq++;
     }
     if (isCes) {
-      surfCedee += sp;
-      if (isSPI) spiCes++;
+      if (isSPI) { spiCes++; surfCedee += sp; }
       else noSpiCes++;
     }
   }
@@ -1130,34 +1182,49 @@ function renderDashboardView() {
   html += '</div>';
 
   if (dashSurfaceTab === 'analyse') {
-    // Original analysis tables
-    html += '<div class="analysis-grid">';
-    html += '<div class="analysis-card">';
-    html += '<h4>' + t('dashSurfAcqCed') + '</h4>';
     var ecart = surfAcquise - surfCedee;
-    html += '<table class="analysis-table"><thead><tr>';
-    html += '<th style="background:#22c55e;">Acquisitions</th>';
-    html += '<th style="background:#ef4444;">Cessions</th>';
-    html += '<th style="background:#dc2626;">Écart</th>';
-    html += '</tr></thead><tbody><tr>';
-    html += '<td style="font-weight:800;color:#22c55e;">' + Math.round(surfAcquise).toLocaleString() + ' m²</td>';
-    html += '<td style="font-weight:800;color:#ef4444;">-' + Math.round(surfCedee).toLocaleString() + ' m²</td>';
-    html += '<td style="font-weight:800;color:#1e293b;">' + Math.round(ecart).toLocaleString() + ' m²</td>';
-    html += '</tr></tbody></table>';
-    html += '</div>';
-    html += '<div class="analysis-card">';
-    html += '<h4>' + t('dashBatiNonBati') + '</h4>';
     var totalSurf = surfBatiSPI + surfNonBatiSPI;
-    html += '<table class="analysis-table"><thead><tr>';
-    html += '<th style="background:#3b82f6;">' + t('dashSurfBati') + '</th>';
-    html += '<th style="background:#22c55e;">' + t('dashSurfNonBati') + '</th>';
-    html += '<th style="background:#475569;">Total</th>';
-    html += '</tr></thead><tbody><tr>';
-    html += '<td style="font-weight:800;color:#3b82f6;">' + Math.round(surfBatiSPI).toLocaleString() + ' m²</td>';
-    html += '<td style="font-weight:800;color:#22c55e;">' + Math.round(surfNonBatiSPI).toLocaleString() + ' m²</td>';
-    html += '<td style="font-weight:800;">' + Math.round(totalSurf).toLocaleString() + ' m²</td>';
-    html += '</tr></tbody></table>';
+
+    html += '<div class="analysis-grid">';
+
+    // LEFT: Surfaces acquises / cédées with pie chart
+    html += '<div class="analysis-card" style="text-align:center;">';
+    html += '<h4>' + t('dashSurfAcqCed') + '</h4>';
+    html += buildPieChart([
+      { value: surfAcquise, color: '#22c55e', label: 'Surfaces acquises' },
+      { value: surfCedee, color: '#d97706', label: 'Surfaces cédées' }
+    ], 200);
+    html += '<div style="display:flex;gap:0;margin-top:16px;border-radius:8px;overflow:hidden;">';
+    html += '<div style="flex:1;background:#22c55e;color:#fff;padding:8px 4px;text-align:center;font-weight:700;font-size:11px;">Acquisitions</div>';
+    html += '<div style="flex:1;background:#ef4444;color:#fff;padding:8px 4px;text-align:center;font-weight:700;font-size:11px;">Cessions</div>';
+    html += '<div style="flex:1;background:#dc2626;color:#fff;padding:8px 4px;text-align:center;font-weight:700;font-size:11px;">Écart</div>';
     html += '</div>';
+    html += '<div style="display:flex;gap:0;">';
+    html += '<div style="flex:1;padding:8px 4px;text-align:center;font-weight:800;font-size:13px;color:#22c55e;">' + Math.round(surfAcquise).toLocaleString() + ' m²</div>';
+    html += '<div style="flex:1;padding:8px 4px;text-align:center;font-weight:800;font-size:13px;color:#ef4444;">-' + Math.round(surfCedee).toLocaleString() + ' m²</div>';
+    html += '<div style="flex:1;padding:8px 4px;text-align:center;font-weight:800;font-size:13px;color:#1e293b;">' + Math.round(ecart).toLocaleString() + ' m²</div>';
+    html += '</div>';
+    html += '</div>';
+
+    // RIGHT: Répartition bâti / non-bâti with pie chart
+    html += '<div class="analysis-card" style="text-align:center;">';
+    html += '<h4>' + t('dashBatiNonBati') + '</h4>';
+    html += buildPieChart([
+      { value: surfBatiSPI, color: '#3b82f6', label: 'Surface bâti' },
+      { value: surfNonBatiSPI, color: '#22c55e', label: 'Surface non bâti' }
+    ], 200);
+    html += '<div style="display:flex;gap:0;margin-top:16px;border-radius:8px;overflow:hidden;">';
+    html += '<div style="flex:1;background:#3b82f6;color:#fff;padding:8px 4px;text-align:center;font-weight:700;font-size:10px;">' + t('dashSurfBati') + '</div>';
+    html += '<div style="flex:1;background:#22c55e;color:#fff;padding:8px 4px;text-align:center;font-weight:700;font-size:10px;">' + t('dashSurfNonBati') + '</div>';
+    html += '<div style="flex:1;background:#475569;color:#fff;padding:8px 4px;text-align:center;font-weight:700;font-size:11px;">Total</div>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:0;">';
+    html += '<div style="flex:1;padding:8px 4px;text-align:center;font-weight:800;font-size:13px;color:#3b82f6;">' + Math.round(surfBatiSPI).toLocaleString() + ' m²</div>';
+    html += '<div style="flex:1;padding:8px 4px;text-align:center;font-weight:800;font-size:13px;color:#22c55e;">' + Math.round(surfNonBatiSPI).toLocaleString() + ' m²</div>';
+    html += '<div style="flex:1;padding:8px 4px;text-align:center;font-weight:800;font-size:13px;">' + Math.round(totalSurf).toLocaleString() + ' m²</div>';
+    html += '</div>';
+    html += '</div>';
+
     html += '</div>';
 
   } else {
