@@ -133,6 +133,7 @@ var i18n = {
     dashGestionSPI: 'Gestion SPI',
     dashTypeActe: "Type d'acte",
     dashSPIEntrants: 'Dont actes pour biens entrants en gestion au SPI',
+    dashSPIStats: 'Statistiques SPI par type d\'acte',
     dashDetailTab: 'Détails des surfaces par bien',
     dashExportExcel: 'Exporter Excel (4 onglets)',
     dashExportDone: 'Export Excel téléchargé avec succès',
@@ -249,6 +250,7 @@ var i18n = {
     dashGestionSPI: 'SPI Management',
     dashTypeActe: 'Deed type',
     dashSPIEntrants: 'Of which deeds for assets entering SPI management',
+    dashSPIStats: 'SPI Statistics by deed type',
     dashDetailTab: 'Surface details by asset',
     dashExportExcel: 'Export Excel (4 tabs)',
     dashExportDone: 'Excel export downloaded successfully',
@@ -1172,8 +1174,25 @@ function renderDashboardView() {
   window._dashDetailBati = detailBati;
   window._dashDetailNonBati = detailNonBati;
 
+  // Build dynamic filter label for titles
+  var filterYearLabel = dashFilterYears.length === 0 ? (currentLang === 'fr' ? 'Toutes années' : 'All years') : dashFilterYears.sort().join(', ');
+  var months_fr_full = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
+  var months_en_full = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var mfl = currentLang === 'fr' ? months_fr_full : months_en_full;
+  var filterMonthLabel = '';
+  if (dashFilterMonths.length > 0) {
+    var sortedMonths = dashFilterMonths.slice().sort(function(a, b) { return parseInt(a) - parseInt(b); });
+    filterMonthLabel = sortedMonths.map(function(m) { return mfl[parseInt(m) - 1]; }).join(', ');
+  }
+  var filterSubtitle = '';
+  if (dashFilterYears.length > 0 || dashFilterMonths.length > 0) {
+    filterSubtitle = '<p style="font-size:12px;color:#94a3b8;margin-top:2px;">' + (filterMonthLabel || '') + '</p>';
+  }
+  var titleYearSuffix = dashFilterYears.length > 0 ? ' - ' + dashFilterYears.sort().join(', ') : '';
+
   html += '<div class="section-card" style="margin-top:20px;">';
-  html += '<h3>📊 ' + t('dashSurfaceAnalysis') + ' <span style="font-size:12px;font-weight:400;color:#64748b;">(Gestion SPI = OUI)</span></h3>';
+  html += '<h3>📊 ' + t('dashSurfaceAnalysis') + titleYearSuffix + ' <span style="font-size:12px;font-weight:400;color:#64748b;">(Gestion SPI = OUI)</span></h3>';
+  html += filterSubtitle;
 
   // Main sub-tabs: Analyse des Surfaces | Détails des surfaces par bien
   html += '<div class="sub-tabs">';
@@ -1262,51 +1281,71 @@ function renderDashboardView() {
 
   // ===== Gestion SPI =====
   html += '<div class="section-card" style="margin-top:20px;">';
-  html += '<h3>� ' + t('dashGestionSPI') + '</h3>';
+  html += '<h3>📈 ' + t('dashGestionSPI') + titleYearSuffix + '</h3>';
+  html += filterSubtitle;
 
+  // SPI Pie chart + Stats table side by side
+  var totalActes = spiAcq + noSpiAcq + spiCes + noSpiCes;
+  var totalSPI = spiAcq + spiCes;
+  var spiNoAcqAll = noSpiAcq;
+  var spiNoCesAll = noSpiCes;
+
+  html += '<div class="analysis-grid">';
+
+  // LEFT: Répartition SPI pie chart
+  html += '<div class="analysis-card" style="text-align:center;">';
+  html += '<h4>Répartition SPI' + titleYearSuffix + '</h4>';
+  html += filterSubtitle;
+  html += buildPieChart([
+    { value: spiAcq, color: '#166534', label: 'Gestion SPI - Tous mouvements sauf Cession' },
+    { value: spiNoAcqAll, color: '#86efac', label: 'Pas de Gestion SPI - Tous mouvements sauf Cession' },
+    { value: spiCes, color: '#4d7c0f', label: 'Gestion SPI - Cession' },
+    { value: spiNoCesAll, color: '#d9f99d', label: 'Pas de Gestion SPI - Cession' }
+  ], 220);
+  html += '</div>';
+
+  // RIGHT: Statistiques SPI par type d'acte
+  html += '<div class="analysis-card">';
+  html += '<h4>📊 ' + t('dashSPIStats') + '</h4>';
   html += '<table class="analysis-table spi-table"><thead><tr>';
   html += '<th>' + t('dashTypeActe') + '</th>';
   html += '<th>Total</th>';
   html += '<th style="color:#22c55e;">' + t('dashSPIEntrants') + '</th>';
   html += '</tr></thead><tbody>';
-  var totalActes = spiAcq + noSpiAcq + spiCes + noSpiCes;
-  var totalSPI = spiAcq + spiCes;
-  html += '<tr><td>Acquisitions</td><td>' + (spiAcq + noSpiAcq).toLocaleString() + '</td><td style="font-weight:800;color:#22c55e;">' + spiAcq.toLocaleString() + '</td></tr>';
-  html += '<tr><td>Cessions</td><td>' + (spiCes + noSpiCes).toLocaleString() + '</td><td style="font-weight:800;color:#22c55e;">' + spiCes.toLocaleString() + '</td></tr>';
+  html += '<tr><td>Acquisitions</td><td><strong>' + (spiAcq + noSpiAcq).toLocaleString() + '</strong></td><td style="font-weight:800;color:#22c55e;">' + spiAcq.toLocaleString() + '</td></tr>';
+  html += '<tr><td>Cessions</td><td><strong>' + (spiCes + noSpiCes).toLocaleString() + '</strong></td><td style="font-weight:800;color:#22c55e;">' + spiCes.toLocaleString() + '</td></tr>';
   html += '<tr><td><strong>Total</strong></td><td><strong>' + totalActes.toLocaleString() + '</strong></td><td style="font-weight:800;color:#22c55e;"><strong>' + totalSPI.toLocaleString() + '</strong></td></tr>';
   html += '</tbody></table>';
   html += '</div>';
 
-  // ===== Répartition par mouvement (bar chart) =====
+  html += '</div></div>';
+
+  // ===== Répartition par mouvement (card grid) =====
   html += '<div class="section-card" style="margin-top:20px;">';
-  html += '<h3>📊 ' + t('repartitionMouvement') + '</h3>';
+  html += '<h3>📊 ' + t('repartitionMouvement') + titleYearSuffix + '</h3>';
+  html += filterSubtitle;
   var mouvKeys = Object.keys(mouvementCount).sort(function(a, b) { return mouvementCount[b] - mouvementCount[a]; });
-  var maxMouv = mouvKeys.length > 0 ? mouvementCount[mouvKeys[0]] : 1;
-  var barColors = { 'ACQUISITION': '#22c55e', 'CESSION': '#ef4444', 'PRÉEMPTION': '#9333ea', 'PREEMPTION': '#9333ea', 'SERVITUDE': '#2563eb', 'ÉCHANGE': '#d97706', 'ECHANGE': '#d97706', 'EXPROPRIATION': '#db2777', 'LIBÉRATION': '#0284c7', 'LIBERATION': '#0284c7' };
-  html += '<div class="bar-chart">';
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;margin-top:16px;">';
   for (var i = 0; i < mouvKeys.length; i++) {
-    var pct = Math.round((mouvementCount[mouvKeys[i]] / maxMouv) * 100);
-    var color = barColors[mouvKeys[i].toUpperCase()] || '#64748b';
-    html += '<div class="bar-row">';
-    html += '<div class="bar-label">' + sanitize(mouvKeys[i]) + '</div>';
-    html += '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + color + ';"><span>' + mouvementCount[mouvKeys[i]].toLocaleString() + '</span></div></div>';
-    html += '<div class="bar-count">' + mouvementCount[mouvKeys[i]].toLocaleString() + '</div>';
+    html += '<div style="text-align:center;padding:16px 8px;">';
+    html += '<div style="width:100%;height:4px;background:#ef4444;border-radius:2px;margin-bottom:12px;"></div>';
+    html += '<div style="font-size:36px;font-weight:900;color:#ef4444;line-height:1;">' + mouvementCount[mouvKeys[i]].toLocaleString() + '</div>';
+    html += '<div style="font-size:11px;font-weight:800;color:#475569;margin-top:6px;text-transform:uppercase;">' + sanitize(mouvKeys[i]) + '</div>';
     html += '</div>';
   }
   html += '</div></div>';
 
-  // ===== Top 10 communes =====
+  // ===== Top 10 communes (card grid) =====
   html += '<div class="section-card" style="margin-top:20px;">';
-  html += '<h3>🏘️ ' + t('topCommunes') + '</h3>';
+  html += '<h3>🏘️ ' + t('topCommunes') + titleYearSuffix + '</h3>';
+  html += filterSubtitle;
   var communeKeys = Object.keys(communeCount).sort(function(a, b) { return communeCount[b] - communeCount[a]; }).slice(0, 10);
-  var maxCommune = communeKeys.length > 0 ? communeCount[communeKeys[0]] : 1;
-  html += '<div class="bar-chart" style="margin-top:12px;">';
+  html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-top:16px;">';
   for (var i = 0; i < communeKeys.length; i++) {
-    var pct = Math.round((communeCount[communeKeys[i]] / maxCommune) * 100);
-    html += '<div class="bar-row">';
-    html += '<div class="bar-label">' + sanitize(communeKeys[i]) + '</div>';
-    html += '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:#ef4444;"><span>' + communeCount[communeKeys[i]] + '</span></div></div>';
-    html += '<div class="bar-count">' + communeCount[communeKeys[i]] + '</div>';
+    html += '<div style="text-align:center;padding:16px 8px;">';
+    html += '<div style="width:100%;height:4px;background:#ef4444;border-radius:2px;margin-bottom:12px;"></div>';
+    html += '<div style="font-size:32px;font-weight:900;color:#ef4444;line-height:1;">' + communeCount[communeKeys[i]] + '</div>';
+    html += '<div style="font-size:10px;font-weight:800;color:#475569;margin-top:6px;text-transform:uppercase;">' + sanitize(communeKeys[i]) + '</div>';
     html += '</div>';
   }
   html += '</div></div>';
