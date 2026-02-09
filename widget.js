@@ -1054,6 +1054,80 @@ function buildPieChart(slices, size) {
   return '<div style="display:flex;flex-direction:column;align-items:center;">' + svg + legend + '</div>';
 }
 
+function buildLineChart(acqData, cesData, deltaData, monthLabels) {
+  var w = 420, h = 220, padL = 35, padR = 10, padT = 15, padB = 30;
+  var chartW = w - padL - padR;
+  var chartH = h - padT - padB;
+
+  // Find max value for Y axis
+  var allVals = acqData.concat(cesData).concat(deltaData);
+  var maxVal = Math.max.apply(null, allVals);
+  if (maxVal <= 0) maxVal = 1;
+  maxVal = Math.ceil(maxVal * 1.15); // 15% headroom
+
+  var stepX = chartW / 11; // 12 months, 11 gaps
+
+  function yPos(val) { return padT + chartH - (val / maxVal) * chartH; }
+  function xPos(idx) { return padL + idx * stepX; }
+
+  var svg = '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" style="max-width:100%;">';
+
+  // Y axis grid lines + labels
+  var ySteps = 5;
+  var yStep = Math.ceil(maxVal / ySteps);
+  for (var i = 0; i <= ySteps; i++) {
+    var yVal = i * yStep;
+    if (yVal > maxVal) break;
+    var y = yPos(yVal);
+    svg += '<line x1="' + padL + '" y1="' + y + '" x2="' + (w - padR) + '" y2="' + y + '" stroke="#e2e8f0" stroke-width="1" />';
+    svg += '<text x="' + (padL - 4) + '" y="' + (y + 3) + '" text-anchor="end" fill="#94a3b8" font-size="9">' + yVal + '</text>';
+  }
+
+  // X axis labels
+  for (var i = 0; i < 12; i++) {
+    svg += '<text x="' + xPos(i) + '" y="' + (h - 5) + '" text-anchor="middle" fill="#94a3b8" font-size="9">' + monthLabels[i] + '</text>';
+  }
+
+  // Helper: build polyline path
+  function buildPath(data) {
+    var pts = [];
+    for (var i = 0; i < 12; i++) pts.push(xPos(i) + ',' + yPos(data[i]));
+    return pts.join(' ');
+  }
+
+  // Acquisition line (dark green, thick)
+  svg += '<polyline points="' + buildPath(acqData) + '" fill="none" stroke="#166534" stroke-width="2.5" stroke-linejoin="round" />';
+  // Acquisition dots
+  for (var i = 0; i < 12; i++) {
+    svg += '<circle cx="' + xPos(i) + '" cy="' + yPos(acqData[i]) + '" r="3.5" fill="#166534" />';
+    if (acqData[i] > 0) svg += '<text x="' + xPos(i) + '" y="' + (yPos(acqData[i]) - 6) + '" text-anchor="middle" fill="#166534" font-size="8" font-weight="700">' + acqData[i] + '</text>';
+  }
+
+  // Cession line (yellow-green)
+  svg += '<polyline points="' + buildPath(cesData) + '" fill="none" stroke="#d4d700" stroke-width="2" stroke-linejoin="round" />';
+  for (var i = 0; i < 12; i++) {
+    svg += '<circle cx="' + xPos(i) + '" cy="' + yPos(cesData[i]) + '" r="3" fill="#d4d700" />';
+    if (cesData[i] > 0) svg += '<text x="' + xPos(i) + '" y="' + (yPos(cesData[i]) + 12) + '" text-anchor="middle" fill="#a3a300" font-size="8" font-weight="700">' + cesData[i] + '</text>';
+  }
+
+  // Delta line (black dashed)
+  svg += '<polyline points="' + buildPath(deltaData) + '" fill="none" stroke="#1e293b" stroke-width="1.5" stroke-dasharray="5,3" stroke-linejoin="round" />';
+  for (var i = 0; i < 12; i++) {
+    svg += '<circle cx="' + xPos(i) + '" cy="' + yPos(deltaData[i]) + '" r="2.5" fill="#1e293b" />';
+  }
+
+  svg += '</svg>';
+
+  // Legend
+  var legend = '<div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:8px;">';
+  legend += '<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:#475569;"><span style="width:10px;height:10px;border-radius:50%;background:#166534;display:inline-block;"></span>Acquisition</div>';
+  legend += '<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:#475569;"><span style="width:10px;height:10px;border-radius:50%;background:#d4d700;display:inline-block;"></span>Cession</div>';
+  legend += '<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:#475569;"><span style="width:10px;height:10px;border-radius:50%;background:#1e293b;display:inline-block;"></span>Delta</div>';
+  legend += '</div>';
+
+  return svg + legend;
+}
+
 function renderDashboardView() {
   var allYears = {};
   for (var i = 0; i < biens.length; i++) {
@@ -1292,16 +1366,32 @@ function renderDashboardView() {
   html += '</div>';
 
   // ===== Gestion SPI =====
+  // Calculate monthly SPI evolution (Gestion SPI = OUI only)
+  var spiMonthAcq = [0,0,0,0,0,0,0,0,0,0,0,0];
+  var spiMonthCes = [0,0,0,0,0,0,0,0,0,0,0,0];
+  var spiMonthDelta = [0,0,0,0,0,0,0,0,0,0,0,0];
+  for (var i = 0; i < filtered.length; i++) {
+    var bSpi = filtered[i];
+    if (String(bSpi.Gestion_SPI || '').toUpperCase() !== 'OUI') continue;
+    var mIdx = parseMonthFromDate(bSpi.Date_Acte) - 1; // 0-11
+    if (mIdx < 0 || mIdx > 11) continue;
+    var mouvSpi = String(bSpi.Mouvement || '').toUpperCase();
+    if (mouvSpi.indexOf('CESSION') !== -1) {
+      spiMonthCes[mIdx]++;
+    } else {
+      spiMonthAcq[mIdx]++;
+    }
+  }
+  for (var i = 0; i < 12; i++) spiMonthDelta[i] = spiMonthAcq[i] - spiMonthCes[i];
+
   html += '<div class="section-card" style="margin-top:20px;">';
   html += '<h3>📈 ' + t('dashGestionSPI') + titleYearSuffix + '</h3>';
   html += filterSubtitle;
 
-  // SPI Pie chart + Stats table side by side
   var totalActes = spiAcq + noSpiAcq + spiCes + noSpiCes;
   var totalSPI = spiAcq + spiCes;
-  var spiNoAcqAll = noSpiAcq;
-  var spiNoCesAll = noSpiCes;
 
+  // Row 1: Pie chart + Line chart
   html += '<div class="analysis-grid">';
 
   // LEFT: Répartition SPI pie chart
@@ -1310,14 +1400,23 @@ function renderDashboardView() {
   html += filterSubtitle;
   html += buildPieChart([
     { value: spiAcq, color: '#166534', label: 'Gestion SPI - Tous mouvements sauf Cession' },
-    { value: spiNoAcqAll, color: '#86efac', label: 'Pas de Gestion SPI - Tous mouvements sauf Cession' },
+    { value: noSpiAcq, color: '#86efac', label: 'Pas de Gestion SPI - Tous mouvements sauf Cession' },
     { value: spiCes, color: '#4d7c0f', label: 'Gestion SPI - Cession' },
-    { value: spiNoCesAll, color: '#d9f99d', label: 'Pas de Gestion SPI - Cession' }
+    { value: noSpiCes, color: '#d9f99d', label: 'Pas de Gestion SPI - Cession' }
   ], 220);
   html += '</div>';
 
-  // RIGHT: Statistiques SPI par type d'acte
-  html += '<div class="analysis-card">';
+  // RIGHT: Évolution SPI line chart
+  html += '<div class="analysis-card" style="text-align:center;">';
+  html += '<h4>Évolution SPI' + titleYearSuffix + ' - Gestion SPI</h4>';
+  html += filterSubtitle;
+  html += buildLineChart(spiMonthAcq, spiMonthCes, spiMonthDelta, mfl);
+  html += '</div>';
+
+  html += '</div>';
+
+  // Row 2: Statistiques SPI par type d'acte
+  html += '<div class="analysis-card" style="margin-top:16px;">';
   html += '<h4>📊 ' + t('dashSPIStats') + '</h4>';
   html += '<table class="analysis-table spi-table"><thead><tr>';
   html += '<th>' + t('dashTypeActe') + '</th>';
@@ -1330,7 +1429,7 @@ function renderDashboardView() {
   html += '</tbody></table>';
   html += '</div>';
 
-  html += '</div></div>';
+  html += '</div>';
 
   // ===== Répartition par mouvement (card grid) =====
   html += '<div class="section-card" style="margin-top:20px;">';
