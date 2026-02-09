@@ -618,11 +618,28 @@ function renderRapportView() {
 function parseDateFR(str) {
   if (!str) return null;
   str = String(str).trim();
-  // Try ISO format (yyyy-mm-dd) from date input
+  if (!str) return null;
+  // Try ISO format (yyyy-mm-dd)
   if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return new Date(str + 'T00:00:00');
   // Try dd/mm/yyyy
-  var parts = str.split('/');
-  if (parts.length === 3) return new Date(parts[2] + '-' + parts[1] + '-' + parts[0] + 'T00:00:00');
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(str)) {
+    var parts = str.split('/');
+    return new Date(parts[2] + '-' + parts[1].padStart(2, '0') + '-' + parts[0].padStart(2, '0') + 'T00:00:00');
+  }
+  // Try Excel serial number (pure digits)
+  if (/^\d+$/.test(str)) {
+    var serial = parseInt(str, 10);
+    // Excel serial: days since 1899-12-30 (accounting for Excel's 1900 leap year bug)
+    var epoch = new Date(1899, 11, 30);
+    var d = new Date(epoch.getTime() + serial * 86400000);
+    if (!isNaN(d.getTime())) return d;
+  }
+  // Try timestamp in seconds (Grist epoch)
+  var num = parseFloat(str);
+  if (!isNaN(num) && num > 86400) {
+    var d2 = new Date(num * 1000);
+    if (!isNaN(d2.getTime()) && d2.getFullYear() > 1970) return d2;
+  }
   return null;
 }
 
@@ -669,10 +686,11 @@ function generateRapportPDF() {
     return;
   }
 
-  // Group by Date_Acte, then sort communes alphabetically within each group
+  // Group by formatted date (dd/mm/yyyy), then sort communes alphabetically within each group
   var groups = {};
   for (var i = 0; i < filtered.length; i++) {
-    var dateKey = filtered[i].Date_Acte || 'Sans date';
+    var parsedD = parseDateFR(filtered[i].Date_Acte);
+    var dateKey = parsedD ? formatDateFR(parsedD) : 'Sans date';
     if (!groups[dateKey]) groups[dateKey] = [];
     groups[dateKey].push(filtered[i]);
   }
