@@ -2406,35 +2406,59 @@ if (!isInsideGrist()) {
       var accessResp = await fetch(accessUrl);
       if (accessResp.ok) {
         var accessData = await accessResp.json();
-        // accessData.maxInheritedRole or accessData.users[].access
-        // The current user's role is in the response
-        var myAccess = (accessData.maxInheritedRole || '').toLowerCase();
-        if (myAccess === 'owners' || myAccess === 'owner') {
-          isOwner = true;
-        } else if (accessData.users && Array.isArray(accessData.users)) {
-          // Find current user (the one making the request)
+        console.log('Access data:', JSON.stringify(accessData));
+        var ownerDetected = false;
+        // Method 1: check users array for isSelf flag
+        if (accessData.users && Array.isArray(accessData.users)) {
           for (var u = 0; u < accessData.users.length; u++) {
-            if (accessData.users[u].isSelf) {
-              var role = (accessData.users[u].access || '').toLowerCase();
+            var usr = accessData.users[u];
+            if (usr.isSelf) {
+              var role = (usr.access || '').toLowerCase();
+              console.log('Current user role (isSelf):', role);
               isOwner = (role === 'owners' || role === 'owner');
+              ownerDetected = true;
               break;
             }
           }
         }
-        if (!isOwner) {
-          // Fallback: if we got access data but couldn't determine role, assume owner
-          // since only owners can grant full access to widgets
-          isOwner = true;
+        // Method 2: if no isSelf found, check maxInheritedRole
+        if (!ownerDetected && accessData.maxInheritedRole) {
+          var inherited = accessData.maxInheritedRole.toLowerCase();
+          console.log('maxInheritedRole:', inherited);
+          isOwner = (inherited === 'owners' || inherited === 'owner');
+          ownerDetected = true;
+        }
+        // Method 3: if still not detected, try _grist_ACLRules table (only owner can read it)
+        if (!ownerDetected) {
+          try {
+            await grist.docApi.fetchTable('_grist_ACLRules');
+            isOwner = true;
+            console.log('Owner detected via _grist_ACLRules access');
+          } catch (aclErr) {
+            isOwner = false;
+            console.log('Not owner: cannot read _grist_ACLRules');
+          }
         }
       } else {
-        // API not available, fallback to owner (full access = owner)
-        isOwner = true;
+        // /access returned error - try _grist_ACLRules fallback
+        try {
+          await grist.docApi.fetchTable('_grist_ACLRules');
+          isOwner = true;
+        } catch (aclErr) {
+          isOwner = false;
+        }
       }
     } catch (e) {
-      // getAccessToken or fetch failed, fallback to owner
-      console.log('Owner detection fallback:', e.message);
-      isOwner = true;
+      // getAccessToken failed - try _grist_ACLRules fallback
+      console.log('Owner detection via /access failed:', e.message);
+      try {
+        await grist.docApi.fetchTable('_grist_ACLRules');
+        isOwner = true;
+      } catch (aclErr) {
+        isOwner = false;
+      }
     }
+    console.log('isOwner:', isOwner);
 
     canManage = isOwner;
     updateOwnerTabs();
