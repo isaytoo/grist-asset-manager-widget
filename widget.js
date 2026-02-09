@@ -124,7 +124,32 @@ var i18n = {
     gestAdded: 'Gestionnaire ajouté',
     gestRemoved: 'Gestionnaire retiré',
     accessDenied: "Vous n'avez pas les droits pour effectuer cette action",
-    ownerOnly: 'Réservé au Owner'
+    ownerOnly: 'Réservé au Owner',
+    tabImport: 'Import Excel',
+    importTitle: 'Import de Fichier Excel',
+    importSubtitle: 'Importez ou mettez à jour vos biens depuis un fichier Excel (.xlsx, .xls)',
+    importDrop: 'Glissez-déposez votre fichier Excel ici',
+    importOr: 'ou cliquez pour sélectionner un fichier',
+    importFormats: 'Formats acceptés : .xlsx, .xls',
+    importReplace: 'Remplacer tout',
+    importReplaceDesc: 'Supprime tous les biens existants et les remplace par le fichier',
+    importAppend: 'Ajouter uniquement',
+    importAppendDesc: 'Ajoute les nouvelles lignes sans toucher aux existantes',
+    importUpdate: 'Mettre à jour',
+    importUpdateDesc: 'Met à jour les biens existants (par Réf DDC) et ajoute les nouveaux',
+    importBtn: 'Lancer l\'import',
+    importPreview: 'Aperçu des données',
+    importRows: 'lignes détectées',
+    importCols: 'colonnes mappées',
+    importInProgress: 'Import en cours...',
+    importDone: 'Import terminé !',
+    importAdded: 'ajoutés',
+    importUpdated: 'mis à jour',
+    importDeleted: 'supprimés',
+    importErrors: 'erreurs',
+    importSelectSheet: 'Sélectionner la feuille',
+    importNoFile: 'Veuillez sélectionner un fichier',
+    importConfirmReplace: 'Attention : cette action va supprimer tous les biens existants et les remplacer. Continuer ?'
   },
   en: {
     appTitle: 'Asset Management',
@@ -195,7 +220,32 @@ var i18n = {
     gestAdded: 'Manager added',
     gestRemoved: 'Manager removed',
     accessDenied: 'You do not have permission to perform this action',
-    ownerOnly: 'Owner only'
+    ownerOnly: 'Owner only',
+    tabImport: 'Import Excel',
+    importTitle: 'Excel File Import',
+    importSubtitle: 'Import or update your assets from an Excel file (.xlsx, .xls)',
+    importDrop: 'Drag and drop your Excel file here',
+    importOr: 'or click to select a file',
+    importFormats: 'Accepted formats: .xlsx, .xls',
+    importReplace: 'Replace all',
+    importReplaceDesc: 'Deletes all existing assets and replaces them with the file',
+    importAppend: 'Append only',
+    importAppendDesc: 'Adds new rows without touching existing ones',
+    importUpdate: 'Update',
+    importUpdateDesc: 'Updates existing assets (by DDC Ref) and adds new ones',
+    importBtn: 'Start import',
+    importPreview: 'Data preview',
+    importRows: 'rows detected',
+    importCols: 'columns mapped',
+    importInProgress: 'Import in progress...',
+    importDone: 'Import complete!',
+    importAdded: 'added',
+    importUpdated: 'updated',
+    importDeleted: 'deleted',
+    importErrors: 'errors',
+    importSelectSheet: 'Select sheet',
+    importNoFile: 'Please select a file',
+    importConfirmReplace: 'Warning: this will delete all existing assets and replace them. Continue?'
   }
 };
 
@@ -284,6 +334,7 @@ function switchTab(tabId) {
   if (tabId === 'search') renderSearchView();
   if (tabId === 'gestion') renderGestionView();
   if (tabId === 'dashboard') renderDashboardView();
+  if (tabId === 'import') renderImportView();
   if (tabId === 'gestionnaires') renderGestionnairesView();
 }
 
@@ -815,6 +866,410 @@ function renderDashboardView() {
   html += '</div>';
 
   document.getElementById('dashboard-view').innerHTML = html;
+}
+
+// =============================================================================
+// IMPORT VIEW
+// =============================================================================
+
+// Mapping: Excel column header → BM_Biens column id
+var EXCEL_COL_MAP = {
+  'Référence DDC': 'Reference_DDC',
+  'Reference DDC': 'Reference_DDC',
+  'Gestion SPI': 'Gestion_SPI',
+  "Nom de l'OFA / OFT": 'Nom_OFA_OFT',
+  'Nom de l\'OFA / OFT': 'Nom_OFA_OFT',
+  'Mouvement': 'Mouvement',
+  "Date de l'acte": 'Date_Acte',
+  'Date de l\'acte': 'Date_Acte',
+  'Année': 'Annee',
+  'Annee': 'Annee',
+  'Commune': 'Commune',
+  'Adresse': 'Adresse',
+  'Ref_ Parcelles': 'Ref_Parcelles',
+  'Ref_Parcelles': 'Ref_Parcelles',
+  'Ref Parcelles': 'Ref_Parcelles',
+  'Type': 'Type_Bien',
+  'Surface bâti': 'Surface_Bati',
+  'Surface bati': 'Surface_Bati',
+  'Surface parcelle acquise ou vendue': 'Surface_Parcelle',
+  'Surface parcelle': 'Surface_Parcelle',
+  'Nouvelle copropriété': 'Nouvelle_Copropriete',
+  'Nouvelle copropriete': 'Nouvelle_Copropriete',
+  'Occupation': 'Occupation',
+  'Jouissance anticipée': 'Jouissance_Anticipee',
+  'Jouissance anticipee': 'Jouissance_Anticipee',
+  'Jouissance différée': 'Jouissance_Differee',
+  'Jouissance differee': 'Jouissance_Differee',
+  'Temps portage Année fin portage': 'Temps_Portage',
+  'Temps portage': 'Temps_Portage',
+  'Mis à bail longue durée': 'Bail_Longue_Duree',
+  'Mis a bail longue duree': 'Bail_Longue_Duree',
+  'Acquisition compte tiers': 'Acquisition_Compte_Tiers',
+  'Préfinancement': 'Prefinancement',
+  'Prefinancement': 'Prefinancement',
+  'Surface pour assurance': 'Surface_Assurance',
+  'Tiers Vendeur ou Acquéreur': 'Tiers_Vendeur_Acquereur',
+  'Tiers Vendeur ou Acquereur': 'Tiers_Vendeur_Acquereur',
+  'Nature du bien - Projet acquisition': 'Nature_Bien',
+  'Nature du bien': 'Nature_Bien',
+  'Import GIMA': 'Import_GIMA',
+  'N° du site': 'Num_Site',
+  'N du site': 'Num_Site',
+  'Saisies manuelles': 'Saisies_Manuelles',
+  "Date d'intégration archivage GIMA": 'Date_Integration_GIMA',
+  'Date d\'intégration archivage GIMA': 'Date_Integration_GIMA',
+  'Date integration GIMA': 'Date_Integration_GIMA',
+  'Dossier numérique sous L': 'Dossier_Numerique',
+  'Dossier numerique sous L': 'Dossier_Numerique',
+  'Observation': 'Observation',
+  'Observations': 'Observation'
+};
+
+var importParsedRows = [];
+var importMappedCols = 0;
+var importMode = 'update'; // 'replace', 'append', 'update'
+var importWorkbook = null;
+var importSheetNames = [];
+var importFileName = '';
+
+function renderImportView() {
+  if (!canManage) {
+    document.getElementById('import-view').innerHTML = '<div class="section-card"><p style="color:#94a3b8;font-style:italic;">🔒 ' + t('accessDenied') + '</p></div>';
+    // Hide import tab for non-managers
+    var importTab = document.querySelector('[data-tab="import"]');
+    if (importTab) importTab.style.display = canManage ? '' : 'none';
+    return;
+  }
+
+  var html = '<div class="section-card">';
+  html += '<h3>📥 ' + t('importTitle') + '</h3>';
+  html += '<p style="color:#64748b;margin-bottom:20px;">' + t('importSubtitle') + '</p>';
+
+  // Drop zone
+  html += '<div class="drop-zone" id="import-drop-zone" onclick="document.getElementById(\'import-file-input\').click()">';
+  html += '<div class="drop-icon">📁</div>';
+  html += '<div class="drop-text">' + t('importDrop') + '</div>';
+  html += '<div class="drop-hint">' + t('importOr') + '</div>';
+  html += '<div class="drop-hint" style="margin-top:8px;">' + t('importFormats') + '</div>';
+  html += '</div>';
+  html += '<input type="file" id="import-file-input" accept=".xlsx,.xls" style="display:none;" onchange="handleImportFile(this)" />';
+
+  // Sheet selector (hidden initially)
+  html += '<div id="import-sheet-select" style="display:none;margin-top:16px;text-align:center;">';
+  html += '<label style="font-weight:700;margin-right:8px;">' + t('importSelectSheet') + ' :</label>';
+  html += '<select id="import-sheet" onchange="parseSelectedSheet()" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;"></select>';
+  html += '</div>';
+
+  // Import mode options
+  html += '<div class="import-options" id="import-mode-options" style="display:none;">';
+  html += '<div class="import-option' + (importMode === 'replace' ? ' selected' : '') + '" onclick="setImportMode(\'replace\')">';
+  html += '<h5>🔄 ' + t('importReplace') + '</h5><p>' + t('importReplaceDesc') + '</p></div>';
+  html += '<div class="import-option' + (importMode === 'append' ? ' selected' : '') + '" onclick="setImportMode(\'append\')">';
+  html += '<h5>➕ ' + t('importAppend') + '</h5><p>' + t('importAppendDesc') + '</p></div>';
+  html += '<div class="import-option selected" onclick="setImportMode(\'update\')">';
+  html += '<h5>🔃 ' + t('importUpdate') + '</h5><p>' + t('importUpdateDesc') + '</p></div>';
+  html += '</div>';
+
+  // Preview area
+  html += '<div id="import-preview-area"></div>';
+
+  // Import button
+  html += '<div id="import-action-area" style="display:none;text-align:center;margin-top:16px;">';
+  html += '<button class="btn btn-primary" onclick="executeImport()" id="import-exec-btn">📥 ' + t('importBtn') + '</button>';
+  html += '</div>';
+
+  // Progress area
+  html += '<div id="import-progress-area"></div>';
+
+  html += '</div>';
+
+  document.getElementById('import-view').innerHTML = html;
+
+  // Show/hide import tab
+  var importTab = document.querySelector('[data-tab="import"]');
+  if (importTab) importTab.style.display = canManage ? '' : 'none';
+
+  // Setup drag and drop
+  setTimeout(setupDropZone, 100);
+}
+
+function setupDropZone() {
+  var dz = document.getElementById('import-drop-zone');
+  if (!dz) return;
+  dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('drag-over'); });
+  dz.addEventListener('dragleave', function() { dz.classList.remove('drag-over'); });
+  dz.addEventListener('drop', function(e) {
+    e.preventDefault();
+    dz.classList.remove('drag-over');
+    if (e.dataTransfer.files.length > 0) {
+      processExcelFile(e.dataTransfer.files[0]);
+    }
+  });
+}
+
+function handleImportFile(input) {
+  if (input.files.length > 0) {
+    processExcelFile(input.files[0]);
+  }
+}
+
+function processExcelFile(file) {
+  importFileName = file.name;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      importWorkbook = XLSX.read(e.target.result, { type: 'array' });
+      importSheetNames = importWorkbook.SheetNames;
+
+      // Update drop zone to show file name
+      var dz = document.getElementById('import-drop-zone');
+      if (dz) {
+        dz.innerHTML = '<div class="drop-icon">✅</div><div class="drop-text">' + sanitize(importFileName) + '</div><div class="drop-hint">' + importSheetNames.length + ' feuille(s) détectée(s)</div>';
+      }
+
+      // Show sheet selector if multiple sheets
+      var sheetSelect = document.getElementById('import-sheet-select');
+      var selectEl = document.getElementById('import-sheet');
+      if (sheetSelect && selectEl) {
+        selectEl.innerHTML = '';
+        for (var i = 0; i < importSheetNames.length; i++) {
+          var opt = document.createElement('option');
+          opt.value = importSheetNames[i];
+          opt.textContent = importSheetNames[i];
+          selectEl.appendChild(opt);
+        }
+        sheetSelect.style.display = importSheetNames.length > 1 ? 'block' : 'none';
+      }
+
+      // Parse first sheet
+      parseSelectedSheet();
+
+    } catch (err) {
+      console.error('Error reading Excel:', err);
+      showToast('Erreur lecture fichier: ' + err.message, 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function parseSelectedSheet() {
+  var sheetName = document.getElementById('import-sheet') ? document.getElementById('import-sheet').value : importSheetNames[0];
+  var ws = importWorkbook.Sheets[sheetName];
+  var jsonData = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+  if (jsonData.length === 0) {
+    showToast('Feuille vide', 'error');
+    return;
+  }
+
+  // Map columns
+  var excelHeaders = Object.keys(jsonData[0]);
+  importMappedCols = 0;
+  var mapping = {};
+
+  for (var i = 0; i < excelHeaders.length; i++) {
+    var h = excelHeaders[i].trim();
+    if (EXCEL_COL_MAP[h]) {
+      mapping[h] = EXCEL_COL_MAP[h];
+      importMappedCols++;
+    }
+  }
+
+  // Convert rows
+  importParsedRows = [];
+  for (var r = 0; r < jsonData.length; r++) {
+    var row = {};
+    for (var h in mapping) {
+      var val = jsonData[r][h];
+      // Clean HTML tags from values
+      if (typeof val === 'string') {
+        val = val.replace(/<[^>]*>/g, '').trim();
+      }
+      row[mapping[h]] = val !== undefined && val !== null ? String(val) : '';
+    }
+    // Only add rows that have at least a reference or commune
+    if (row.Reference_DDC || row.Commune) {
+      importParsedRows.push(row);
+    }
+  }
+
+  // Show options and preview
+  document.getElementById('import-mode-options').style.display = 'flex';
+  document.getElementById('import-action-area').style.display = 'block';
+
+  // Render preview
+  renderImportPreview();
+}
+
+function renderImportPreview() {
+  var html = '<div style="margin-top:20px;">';
+
+  // Stats
+  html += '<div class="import-stats">';
+  html += '<div class="import-stat"><div class="stat-num">' + importParsedRows.length + '</div><div class="stat-txt">' + t('importRows') + '</div></div>';
+  html += '<div class="import-stat"><div class="stat-num">' + importMappedCols + '</div><div class="stat-txt">' + t('importCols') + '</div></div>';
+  html += '<div class="import-stat"><div class="stat-num">' + biens.length + '</div><div class="stat-txt">' + (currentLang === 'fr' ? 'biens existants' : 'existing assets') + '</div></div>';
+  html += '</div>';
+
+  // Preview table (first 10 rows)
+  html += '<h4 style="margin-top:16px;font-weight:800;">📋 ' + t('importPreview') + ' (' + Math.min(10, importParsedRows.length) + '/' + importParsedRows.length + ')</h4>';
+  var previewCols = ['Reference_DDC', 'Mouvement', 'Commune', 'Adresse', 'Type_Bien', 'Surface_Parcelle'];
+  html += '<div class="import-preview"><table class="data-table"><thead><tr>';
+  for (var c = 0; c < previewCols.length; c++) {
+    var col = BIEN_COLUMNS.find(function(cc) { return cc.id === previewCols[c]; });
+    html += '<th>' + (col ? colLabel(col) : previewCols[c]) + '</th>';
+  }
+  html += '</tr></thead><tbody>';
+  var previewMax = Math.min(10, importParsedRows.length);
+  for (var i = 0; i < previewMax; i++) {
+    html += '<tr>';
+    for (var c = 0; c < previewCols.length; c++) {
+      var val = importParsedRows[i][previewCols[c]] || '';
+      if (previewCols[c] === 'Mouvement') {
+        html += '<td>' + movementBadge(val) + '</td>';
+      } else {
+        html += '<td>' + sanitize(val) + '</td>';
+      }
+    }
+    html += '</tr>';
+  }
+  if (importParsedRows.length > 10) {
+    html += '<tr><td colspan="' + previewCols.length + '" style="text-align:center;color:#94a3b8;">... ' + (importParsedRows.length - 10) + ' ' + (currentLang === 'fr' ? 'lignes supplémentaires' : 'more rows') + '</td></tr>';
+  }
+  html += '</tbody></table></div>';
+  html += '</div>';
+
+  document.getElementById('import-preview-area').innerHTML = html;
+}
+
+function setImportMode(mode) {
+  importMode = mode;
+  document.querySelectorAll('.import-option').forEach(function(el) { el.classList.remove('selected'); });
+  event.currentTarget.classList.add('selected');
+}
+
+async function executeImport() {
+  if (!canManage) { showToast(t('accessDenied'), 'error'); return; }
+  if (importParsedRows.length === 0) { showToast(t('importNoFile'), 'error'); return; }
+
+  if (importMode === 'replace') {
+    if (!confirm(t('importConfirmReplace'))) return;
+  }
+
+  var btn = document.getElementById('import-exec-btn');
+  if (btn) btn.disabled = true;
+
+  var progressArea = document.getElementById('import-progress-area');
+  var added = 0, updated = 0, deleted = 0, errors = 0;
+
+  progressArea.innerHTML = '<div class="import-progress"><p style="font-weight:700;">⏳ ' + t('importInProgress') + '</p><div class="progress-bar"><div class="progress-bar-fill" id="import-progress-fill" style="width:0%"></div></div><p id="import-progress-text" style="font-size:12px;color:#64748b;margin-top:6px;">0 / ' + importParsedRows.length + '</p></div>';
+
+  try {
+    var BATCH_SIZE = 50;
+
+    if (importMode === 'replace') {
+      // Delete all existing records
+      if (biens.length > 0) {
+        var deleteIds = biens.map(function(b) { return b.id; });
+        for (var i = 0; i < deleteIds.length; i += BATCH_SIZE) {
+          var batch = deleteIds.slice(i, i + BATCH_SIZE);
+          var actions = batch.map(function(id) { return ['RemoveRecord', BIENS_TABLE, id]; });
+          await grist.docApi.applyUserActions(actions);
+          deleted += batch.length;
+        }
+      }
+      // Add all new records
+      for (var i = 0; i < importParsedRows.length; i += BATCH_SIZE) {
+        var batch = importParsedRows.slice(i, i + BATCH_SIZE);
+        var actions = batch.map(function(row) { return ['AddRecord', BIENS_TABLE, null, row]; });
+        await grist.docApi.applyUserActions(actions);
+        added += batch.length;
+        updateImportProgress(added + deleted, importParsedRows.length + biens.length);
+      }
+
+    } else if (importMode === 'append') {
+      // Just add all rows
+      for (var i = 0; i < importParsedRows.length; i += BATCH_SIZE) {
+        var batch = importParsedRows.slice(i, i + BATCH_SIZE);
+        var actions = batch.map(function(row) { return ['AddRecord', BIENS_TABLE, null, row]; });
+        await grist.docApi.applyUserActions(actions);
+        added += batch.length;
+        updateImportProgress(added, importParsedRows.length);
+      }
+
+    } else if (importMode === 'update') {
+      // Build index of existing biens by Reference_DDC
+      var existingIndex = {};
+      for (var i = 0; i < biens.length; i++) {
+        var ref = String(biens[i].Reference_DDC || '').trim().toLowerCase();
+        if (ref) existingIndex[ref] = biens[i].id;
+      }
+
+      var toAdd = [];
+      var toUpdate = [];
+
+      for (var i = 0; i < importParsedRows.length; i++) {
+        var row = importParsedRows[i];
+        var ref = String(row.Reference_DDC || '').trim().toLowerCase();
+        if (ref && existingIndex[ref]) {
+          toUpdate.push({ id: existingIndex[ref], data: row });
+        } else {
+          toAdd.push(row);
+        }
+      }
+
+      var total = toAdd.length + toUpdate.length;
+      var done = 0;
+
+      // Update existing
+      for (var i = 0; i < toUpdate.length; i += BATCH_SIZE) {
+        var batch = toUpdate.slice(i, i + BATCH_SIZE);
+        var actions = batch.map(function(item) { return ['UpdateRecord', BIENS_TABLE, item.id, item.data]; });
+        await grist.docApi.applyUserActions(actions);
+        updated += batch.length;
+        done += batch.length;
+        updateImportProgress(done, total);
+      }
+
+      // Add new
+      for (var i = 0; i < toAdd.length; i += BATCH_SIZE) {
+        var batch = toAdd.slice(i, i + BATCH_SIZE);
+        var actions = batch.map(function(row) { return ['AddRecord', BIENS_TABLE, null, row]; });
+        await grist.docApi.applyUserActions(actions);
+        added += batch.length;
+        done += batch.length;
+        updateImportProgress(done, total);
+      }
+    }
+
+    // Done!
+    progressArea.innerHTML = '<div class="import-progress" style="margin-top:16px;">' +
+      '<p style="font-weight:800;color:#22c55e;font-size:16px;">✅ ' + t('importDone') + '</p>' +
+      '<div class="import-stats" style="margin-top:12px;">' +
+      (added > 0 ? '<div class="import-stat"><div class="stat-num" style="color:#22c55e;">' + added + '</div><div class="stat-txt">' + t('importAdded') + '</div></div>' : '') +
+      (updated > 0 ? '<div class="import-stat"><div class="stat-num" style="color:#3b82f6;">' + updated + '</div><div class="stat-txt">' + t('importUpdated') + '</div></div>' : '') +
+      (deleted > 0 ? '<div class="import-stat"><div class="stat-num" style="color:#ef4444;">' + deleted + '</div><div class="stat-txt">' + t('importDeleted') + '</div></div>' : '') +
+      '</div></div>';
+
+    showToast(t('importDone') + ' ' + added + ' ' + t('importAdded') + ', ' + updated + ' ' + t('importUpdated'), 'success');
+    await loadAllData();
+
+  } catch (e) {
+    console.error('Import error:', e);
+    showToast('Erreur import: ' + e.message, 'error');
+    progressArea.innerHTML += '<p style="color:#ef4444;margin-top:8px;">❌ Erreur: ' + sanitize(e.message) + '</p>';
+  }
+
+  if (btn) btn.disabled = false;
+}
+
+function updateImportProgress(done, total) {
+  var pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  var fill = document.getElementById('import-progress-fill');
+  var text = document.getElementById('import-progress-text');
+  if (fill) fill.style.width = pct + '%';
+  if (text) text.textContent = done + ' / ' + total + ' (' + pct + '%)';
 }
 
 // =============================================================================
