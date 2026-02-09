@@ -366,7 +366,20 @@ function movementBadge(mouvement) {
 // TAB SWITCHING
 // =============================================================================
 
+function updateOwnerTabs() {
+  var ownerOnlyTabs = ['import', 'gestionnaires'];
+  ownerOnlyTabs.forEach(function(tab) {
+    var btn = document.querySelector('[data-tab="' + tab + '"]');
+    if (btn) btn.style.display = isOwner ? '' : 'none';
+    var content = document.getElementById('tab-' + tab);
+    if (content && !isOwner) content.classList.remove('active');
+  });
+}
+
 function switchTab(tabId) {
+  // Block non-owners from accessing owner-only tabs
+  if ((tabId === 'import' || tabId === 'gestionnaires') && !isOwner) return;
+
   document.querySelectorAll('.tab-btn').forEach(function(btn) {
     btn.classList.toggle('active', btn.getAttribute('data-tab') === tabId);
   });
@@ -2209,9 +2222,8 @@ function renderGestionnairesView() {
 
   document.getElementById('gestionnaires-view').innerHTML = html;
 
-  // Hide tab for non-owners
-  var gestTab = document.querySelector('[data-tab="gestionnaires"]');
-  if (gestTab) gestTab.style.display = isOwner ? '' : 'none';
+  // Hide tabs for non-owners
+  updateOwnerTabs();
 }
 
 // =============================================================================
@@ -2387,15 +2399,16 @@ if (!isInsideGrist()) {
   (async function() {
     await grist.ready({ requiredAccess: 'full' });
 
-    // Detect owner
+    // Detect owner: only owners can read access rules
     try {
       await grist.docApi.getAccessRules();
       isOwner = true;
     } catch (e) {
-      isOwner = true; // Default to owner for custom widgets with full access
+      isOwner = false;
     }
 
     canManage = isOwner;
+    updateOwnerTabs();
 
     await ensureTables();
     await loadAllData();
