@@ -120,6 +120,19 @@ var i18n = {
     totalSurfaceBati: 'Surface totale bâtis',
     repartitionMouvement: 'Répartition par Type de Mouvement',
     topCommunes: 'Top 10 des Communes',
+    dashFilters: 'Filtres temporels',
+    dashYear: 'Année',
+    dashMonth: "Mois de l'acte",
+    dashAll: 'Toutes',
+    dashMonthHint: 'Sélectionnez un ou plusieurs mois',
+    dashSurfaceAnalysis: 'Analyse des Surfaces',
+    dashSurfAcqCed: 'Surfaces acquises / surfaces cédées',
+    dashBatiNonBati: 'Répartition bâti et non-bâti',
+    dashSurfBati: 'Surface Bâti (surface de plancher)',
+    dashSurfNonBati: 'Surface parcellaire Non Bâti',
+    dashGestionSPI: 'Gestion SPI',
+    dashTypeActe: "Type d'acte",
+    dashSPIEntrants: 'Dont actes pour biens entrants en gestion au SPI',
     gestTitle: 'Gestion des Gestionnaires',
     gestSubtitle: 'Désignez les personnes autorisées à gérer les biens (en plus du Owner)',
     gestEmail: 'Email du gestionnaire',
@@ -220,6 +233,19 @@ var i18n = {
     totalSurfaceBati: 'Total Built Area',
     repartitionMouvement: 'Distribution by Movement Type',
     topCommunes: 'Top 10 Municipalities',
+    dashFilters: 'Time Filters',
+    dashYear: 'Year',
+    dashMonth: 'Deed month',
+    dashAll: 'All',
+    dashMonthHint: 'Select one or more months',
+    dashSurfaceAnalysis: 'Surface Analysis',
+    dashSurfAcqCed: 'Acquired surfaces / ceded surfaces',
+    dashBatiNonBati: 'Built and unbuilt distribution',
+    dashSurfBati: 'Built Surface (floor area)',
+    dashSurfNonBati: 'Unbuilt Plot Surface',
+    dashGestionSPI: 'SPI Management',
+    dashTypeActe: 'Deed type',
+    dashSPIEntrants: 'Of which deeds for assets entering SPI management',
     gestTitle: 'Manager Management',
     gestSubtitle: 'Designate people authorized to manage assets (in addition to Owner)',
     gestEmail: 'Manager email',
@@ -801,10 +827,10 @@ function buildFormHtml(bien) {
   html += '<div class="form-group"><label>Dossier numérique sous L</label><input type="text" id="f-Dossier_Numerique" value="' + v('Dossier_Numerique') + '" /></div>';
   html += '</div></div>';
 
-  // Section: Nature et Observations
+  // Section: Nature et Observations (rich text editors)
   html += '<div class="form-section"><h4>📝 ' + t('sectionNature') + '</h4>';
-  html += '<div class="form-group"><label>Nature du bien - Projet acquisition</label><textarea id="f-Nature_Bien">' + v('Nature_Bien') + '</textarea></div>';
-  html += '<div class="form-group"><label>Observations</label><textarea id="f-Observation">' + v('Observation') + '</textarea></div>';
+  html += '<div class="form-group"><label>Nature du bien - Projet acquisition</label><div id="f-Nature_Bien">' + (isEdit ? (bien.Nature_Bien || '') : '') + '</div></div>';
+  html += '<div class="form-group"><label>Observations</label><div id="f-Observation">' + (isEdit ? (bien.Observation || '') : '') + '</div></div>';
   html += '</div>';
 
   return html;
@@ -817,12 +843,60 @@ function getFormData() {
     if (col.id === 'Gestion_SPI') {
       var radio = document.querySelector('input[name="f-Gestion_SPI"]:checked');
       record[col.id] = radio ? radio.value : 'Non';
+    } else if (col.id === 'Nature_Bien') {
+      record[col.id] = window._joditNature ? window._joditNature.value : '';
+    } else if (col.id === 'Observation') {
+      record[col.id] = window._joditObservation ? window._joditObservation.value : '';
     } else {
       var el = document.getElementById('f-' + col.id);
       record[col.id] = el ? el.value.trim() : '';
     }
   }
   return record;
+}
+
+function initModalEditors() {
+  var joditConfig = {
+    language: currentLang,
+    minHeight: 120,
+    toolbarAdaptive: false,
+    askBeforePasteHTML: false,
+    askBeforePasteFromWord: false,
+    defaultActionOnPaste: 'insert_clear_html',
+    buttons: [
+      'undo', 'redo', '|',
+      'bold', 'italic', 'underline', 'strikethrough', '|',
+      'brush', 'paragraph', '|',
+      'align', '|',
+      'ul', 'ol', '|',
+      'indent', 'outdent', '|',
+      'eraser'
+    ],
+    style: {
+      'font-family': '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      'font-size': '13px',
+      'line-height': '1.5'
+    },
+    iframe: false,
+    showCharsCounter: false,
+    showWordsCounter: false,
+    showXPathInStatusbar: false,
+    placeholder: currentLang === 'fr' ? 'Saisir le texte...' : 'Enter text...'
+  };
+
+  var natureEl = document.getElementById('f-Nature_Bien');
+  if (natureEl) {
+    window._joditNature = Jodit.make('#f-Nature_Bien', Object.assign({}, joditConfig, {
+      placeholder: currentLang === 'fr' ? 'Décrire la nature du bien...' : 'Describe the property nature...'
+    }));
+  }
+
+  var obsEl = document.getElementById('f-Observation');
+  if (obsEl) {
+    window._joditObservation = Jodit.make('#f-Observation', Object.assign({}, joditConfig, {
+      placeholder: currentLang === 'fr' ? 'Informations complémentaires...' : 'Additional information...'
+    }));
+  }
 }
 
 function openAddModal() {
@@ -840,6 +914,7 @@ function openAddModal() {
   html += '</div></div></div>';
 
   document.getElementById('modal-container').innerHTML = html;
+  setTimeout(initModalEditors, 100);
 }
 
 function openEditModal(bienId) {
@@ -854,37 +929,92 @@ function openEditModal(bienId) {
   html += buildFormHtml(b);
   html += '</div>';
   html += '<div class="modal-footer">';
-  html += '<button class="btn btn-danger" onclick="deleteBien(' + b.id + ')">🗑️ ' + t('delete') + '</button>';
+  html += '<button class="btn btn-danger" onclick="openDeleteConfirmModal(biens.find(function(x){return x.id===' + b.id + '}))">🗑️ ' + t('delete') + '</button>';
   html += '<div style="display:flex;gap:8px;">';
   html += '<button class="btn btn-secondary" onclick="closeModalForce()">❌ ' + t('cancel') + '</button>';
   html += '<button class="btn btn-success" onclick="saveBien(' + b.id + ')">💾 ' + t('save') + '</button>';
   html += '</div></div></div></div>';
 
   document.getElementById('modal-container').innerHTML = html;
+  setTimeout(initModalEditors, 100);
 }
 
 // =============================================================================
 // DASHBOARD VIEW
 // =============================================================================
 
+var dashFilterYear = 'all';
+var dashFilterMonth = 'all';
+
+function getFilteredBiens() {
+  return biens.filter(function(b) {
+    if (dashFilterYear !== 'all' && String(b.Annee) !== String(dashFilterYear)) return false;
+    if (dashFilterMonth !== 'all') {
+      var dateStr = String(b.Date_Acte || '');
+      var month = 0;
+      // Try to parse month from date string (various formats)
+      var parts = dateStr.split(/[\/\-\.]/);
+      if (parts.length >= 2) {
+        // Try MM/DD/YY or DD/MM/YY
+        var m = parseInt(parts[0], 10);
+        if (m >= 1 && m <= 12) month = m;
+        else { m = parseInt(parts[1], 10); if (m >= 1 && m <= 12) month = m; }
+      }
+      if (month !== parseInt(dashFilterMonth, 10)) return false;
+    }
+    return true;
+  });
+}
+
 function renderDashboardView() {
-  var totalBiens = biens.length;
+  var allYears = {};
+  for (var i = 0; i < biens.length; i++) {
+    if (biens[i].Annee) allYears[biens[i].Annee] = true;
+  }
+  var yearList = Object.keys(allYears).sort(function(a, b) { return parseInt(b) - parseInt(a); });
+
+  var filtered = getFilteredBiens();
+  var totalBiens = filtered.length;
   var communesSet = {};
   var surfaceParcelle = 0;
   var surfaceBati = 0;
   var mouvementCount = {};
   var communeCount = {};
 
-  for (var i = 0; i < biens.length; i++) {
-    var b = biens[i];
+  // SPI stats
+  var spiAcq = 0, spiCes = 0, noSpiAcq = 0, noSpiCes = 0;
+  // Surface analysis
+  var surfAcquise = 0, surfCedee = 0;
+  var surfBatiSPI = 0, surfNonBatiSPI = 0;
+
+  for (var i = 0; i < filtered.length; i++) {
+    var b = filtered[i];
     if (b.Commune) { communesSet[b.Commune] = true; communeCount[b.Commune] = (communeCount[b.Commune] || 0) + 1; }
-    surfaceParcelle += parseNum(b.Surface_Parcelle);
-    surfaceBati += parseNum(b.Surface_Bati);
+    var sp = parseNum(b.Surface_Parcelle);
+    var sb = parseNum(b.Surface_Bati);
+    surfaceParcelle += sp;
+    surfaceBati += sb;
     if (b.Mouvement) mouvementCount[b.Mouvement] = (mouvementCount[b.Mouvement] || 0) + 1;
+
+    var mouv = String(b.Mouvement || '').toUpperCase();
+    var isSPI = String(b.Gestion_SPI || '').toUpperCase() === 'OUI';
+    var isAcq = mouv.indexOf('ACQUISITION') !== -1 || mouv.indexOf('PREEMPTION') !== -1 || mouv.indexOf('PRÉEMPTION') !== -1;
+    var isCes = mouv.indexOf('CESSION') !== -1;
+
+    if (isAcq) {
+      surfAcquise += sp;
+      if (isSPI) { spiAcq++; surfBatiSPI += sb; surfNonBatiSPI += (sp - sb); }
+      else noSpiAcq++;
+    }
+    if (isCes) {
+      surfCedee += sp;
+      if (isSPI) spiCes++;
+      else noSpiCes++;
+    }
   }
 
   var html = '<div class="section-card">';
-  html += '<h3>📊 ' + t('dashTitle') + '</h3>';
+  html += '<h3 style="display:flex;align-items:center;gap:10px;"><span style="background:#ef4444;color:#fff;padding:8px 12px;border-radius:10px;font-size:20px;">📊</span> ' + t('dashTitle') + '</h3>';
   html += '<p style="color:#64748b;margin-bottom:20px;">' + t('dashSubtitle') + '</p>';
 
   // Stats cards
@@ -895,29 +1025,131 @@ function renderDashboardView() {
   html += '<div class="stat-card"><div class="stat-value">' + Math.round(surfaceBati).toLocaleString() + ' m²</div><div class="stat-label">' + t('totalSurfaceBati') + '</div></div>';
   html += '</div>';
 
-  // Répartition par mouvement
-  html += '<div class="section-card" style="border-top:none;box-shadow:none;padding:0;margin-top:20px;">';
-  html += '<h3>📊 ' + t('repartitionMouvement') + '</h3>';
-  html += '<div class="dashboard-grid" style="margin-top:12px;">';
-  var mouvKeys = Object.keys(mouvementCount).sort(function(a, b) { return mouvementCount[b] - mouvementCount[a]; });
-  for (var i = 0; i < mouvKeys.length; i++) {
-    html += '<div class="dash-card"><div class="dash-value">' + mouvementCount[mouvKeys[i]].toLocaleString() + '</div><div class="dash-label">' + sanitize(mouvKeys[i]).toUpperCase() + '</div></div>';
+  // ===== Filtres temporels =====
+  html += '<div class="section-card" style="margin-top:20px;">';
+  html += '<h3>📅 ' + t('dashFilters') + '</h3>';
+
+  // Year pills
+  html += '<div style="margin-bottom:12px;"><span style="font-size:12px;font-weight:700;color:#64748b;">' + t('dashYear') + '</span>';
+  html += '<div class="filter-pills">';
+  html += '<button class="filter-pill' + (dashFilterYear === 'all' ? ' active' : '') + '" onclick="setDashFilter(\'year\',\'all\')">' + t('dashAll') + '</button>';
+  for (var i = 0; i < yearList.length; i++) {
+    html += '<button class="filter-pill' + (dashFilterYear === yearList[i] ? ' active' : '') + '" onclick="setDashFilter(\'year\',\'' + yearList[i] + '\')">' + yearList[i] + '</button>';
   }
   html += '</div></div>';
 
-  // Top 10 communes
-  html += '<div class="section-card" style="border-top:none;box-shadow:none;padding:0;margin-top:20px;">';
+  // Month pills
+  var months_fr = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
+  var months_en = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var months = currentLang === 'fr' ? months_fr : months_en;
+  html += '<div><span style="font-size:12px;font-weight:700;color:#64748b;">' + t('dashMonth') + '</span>';
+  html += '<div class="filter-pills">';
+  html += '<button class="filter-pill' + (dashFilterMonth === 'all' ? ' active' : '') + '" onclick="setDashFilter(\'month\',\'all\')">' + t('dashAll') + '</button>';
+  for (var i = 0; i < 12; i++) {
+    html += '<button class="filter-pill' + (dashFilterMonth === String(i + 1) ? ' active' : '') + '" onclick="setDashFilter(\'month\',\'' + (i + 1) + '\')">' + months[i] + '</button>';
+  }
+  html += '</div>';
+  html += '<p style="font-size:11px;color:#94a3b8;margin-top:4px;">' + t('dashMonthHint') + '</p>';
+  html += '</div></div>';
+
+  // ===== Analyse des Surfaces (Gestion SPI = OUI) =====
+  html += '<div class="section-card" style="margin-top:20px;">';
+  html += '<h3>📊 ' + t('dashSurfaceAnalysis') + ' <span style="font-size:12px;font-weight:400;color:#64748b;">(Gestion SPI = OUI)</span></h3>';
+
+  html += '<div class="analysis-grid">';
+
+  // Left: Surfaces acquises / cédées
+  html += '<div class="analysis-card">';
+  html += '<h4>' + t('dashSurfAcqCed') + '</h4>';
+  var ecart = surfAcquise - surfCedee;
+  html += '<table class="analysis-table"><thead><tr>';
+  html += '<th style="background:#22c55e;">Acquisitions</th>';
+  html += '<th style="background:#ef4444;">Cessions</th>';
+  html += '<th style="background:#dc2626;">Écart</th>';
+  html += '</tr></thead><tbody><tr>';
+  html += '<td style="font-weight:800;color:#22c55e;">' + Math.round(surfAcquise).toLocaleString() + ' m²</td>';
+  html += '<td style="font-weight:800;color:#ef4444;">-' + Math.round(surfCedee).toLocaleString() + ' m²</td>';
+  html += '<td style="font-weight:800;color:#1e293b;">' + Math.round(ecart).toLocaleString() + ' m²</td>';
+  html += '</tr></tbody></table>';
+  html += '</div>';
+
+  // Right: Répartition bâti / non-bâti
+  html += '<div class="analysis-card">';
+  html += '<h4>' + t('dashBatiNonBati') + '</h4>';
+  var totalSurf = surfBatiSPI + surfNonBatiSPI;
+  html += '<table class="analysis-table"><thead><tr>';
+  html += '<th style="background:#3b82f6;">' + t('dashSurfBati') + '</th>';
+  html += '<th style="background:#22c55e;">' + t('dashSurfNonBati') + '</th>';
+  html += '<th style="background:#475569;">Total</th>';
+  html += '</tr></thead><tbody><tr>';
+  html += '<td style="font-weight:800;color:#3b82f6;">' + Math.round(surfBatiSPI).toLocaleString() + ' m²</td>';
+  html += '<td style="font-weight:800;color:#22c55e;">' + Math.round(surfNonBatiSPI).toLocaleString() + ' m²</td>';
+  html += '<td style="font-weight:800;">' + Math.round(totalSurf).toLocaleString() + ' m²</td>';
+  html += '</tr></tbody></table>';
+  html += '</div>';
+
+  html += '</div></div>';
+
+  // ===== Gestion SPI =====
+  html += '<div class="section-card" style="margin-top:20px;">';
+  html += '<h3>� ' + t('dashGestionSPI') + '</h3>';
+
+  html += '<table class="analysis-table spi-table"><thead><tr>';
+  html += '<th>' + t('dashTypeActe') + '</th>';
+  html += '<th>Total</th>';
+  html += '<th style="color:#22c55e;">' + t('dashSPIEntrants') + '</th>';
+  html += '</tr></thead><tbody>';
+  var totalActes = spiAcq + noSpiAcq + spiCes + noSpiCes;
+  var totalSPI = spiAcq + spiCes;
+  html += '<tr><td>Acquisitions</td><td>' + (spiAcq + noSpiAcq).toLocaleString() + '</td><td style="font-weight:800;color:#22c55e;">' + spiAcq.toLocaleString() + '</td></tr>';
+  html += '<tr><td>Cessions</td><td>' + (spiCes + noSpiCes).toLocaleString() + '</td><td style="font-weight:800;color:#22c55e;">' + spiCes.toLocaleString() + '</td></tr>';
+  html += '<tr><td><strong>Total</strong></td><td><strong>' + totalActes.toLocaleString() + '</strong></td><td style="font-weight:800;color:#22c55e;"><strong>' + totalSPI.toLocaleString() + '</strong></td></tr>';
+  html += '</tbody></table>';
+  html += '</div>';
+
+  // ===== Répartition par mouvement (bar chart) =====
+  html += '<div class="section-card" style="margin-top:20px;">';
+  html += '<h3>📊 ' + t('repartitionMouvement') + '</h3>';
+  var mouvKeys = Object.keys(mouvementCount).sort(function(a, b) { return mouvementCount[b] - mouvementCount[a]; });
+  var maxMouv = mouvKeys.length > 0 ? mouvementCount[mouvKeys[0]] : 1;
+  var barColors = { 'ACQUISITION': '#22c55e', 'CESSION': '#ef4444', 'PRÉEMPTION': '#9333ea', 'PREEMPTION': '#9333ea', 'SERVITUDE': '#2563eb', 'ÉCHANGE': '#d97706', 'ECHANGE': '#d97706', 'EXPROPRIATION': '#db2777', 'LIBÉRATION': '#0284c7', 'LIBERATION': '#0284c7' };
+  html += '<div class="bar-chart">';
+  for (var i = 0; i < mouvKeys.length; i++) {
+    var pct = Math.round((mouvementCount[mouvKeys[i]] / maxMouv) * 100);
+    var color = barColors[mouvKeys[i].toUpperCase()] || '#64748b';
+    html += '<div class="bar-row">';
+    html += '<div class="bar-label">' + sanitize(mouvKeys[i]) + '</div>';
+    html += '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + color + ';"><span>' + mouvementCount[mouvKeys[i]].toLocaleString() + '</span></div></div>';
+    html += '<div class="bar-count">' + mouvementCount[mouvKeys[i]].toLocaleString() + '</div>';
+    html += '</div>';
+  }
+  html += '</div></div>';
+
+  // ===== Top 10 communes =====
+  html += '<div class="section-card" style="margin-top:20px;">';
   html += '<h3>🏘️ ' + t('topCommunes') + '</h3>';
   var communeKeys = Object.keys(communeCount).sort(function(a, b) { return communeCount[b] - communeCount[a]; }).slice(0, 10);
-  html += '<div class="top-grid" style="margin-top:12px;">';
+  var maxCommune = communeKeys.length > 0 ? communeCount[communeKeys[0]] : 1;
+  html += '<div class="bar-chart" style="margin-top:12px;">';
   for (var i = 0; i < communeKeys.length; i++) {
-    html += '<div class="top-card"><div class="top-value">' + communeCount[communeKeys[i]] + '</div><div class="top-label">' + sanitize(communeKeys[i]) + '</div></div>';
+    var pct = Math.round((communeCount[communeKeys[i]] / maxCommune) * 100);
+    html += '<div class="bar-row">';
+    html += '<div class="bar-label">' + sanitize(communeKeys[i]) + '</div>';
+    html += '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:#ef4444;"><span>' + communeCount[communeKeys[i]] + '</span></div></div>';
+    html += '<div class="bar-count">' + communeCount[communeKeys[i]] + '</div>';
+    html += '</div>';
   }
   html += '</div></div>';
 
   html += '</div>';
 
   document.getElementById('dashboard-view').innerHTML = html;
+}
+
+function setDashFilter(type, value) {
+  if (type === 'year') dashFilterYear = value;
+  if (type === 'month') dashFilterMonth = value;
+  renderDashboardView();
 }
 
 // =============================================================================
