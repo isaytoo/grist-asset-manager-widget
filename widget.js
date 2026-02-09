@@ -1055,7 +1055,7 @@ function buildPieChart(slices, size) {
 }
 
 function buildLineChart(acqData, cesData, deltaData, monthLabels) {
-  var w = 420, h = 220, padL = 35, padR = 10, padT = 15, padB = 30;
+  var w = 500, h = 300, padL = 35, padR = 10, padT = 15, padB = 30;
   var chartW = w - padL - padR;
   var chartH = h - padT - padB;
 
