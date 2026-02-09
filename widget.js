@@ -93,6 +93,10 @@ var i18n = {
     cancel: 'Annuler',
     delete: 'Supprimer',
     confirmDelete: 'Êtes-vous sûr de vouloir supprimer ce bien ?',
+    confirmDeleteTitle: 'Confirmation de suppression',
+    confirmDeleteMsg: 'Êtes-vous sûr de vouloir supprimer définitivement ce bien ?',
+    confirmDeleteWarning: 'Cette action est irréversible. Toutes les données de ce bien seront perdues.',
+    confirmDeleteBtn: 'Supprimer définitivement',
     bienAdded: 'Bien ajouté avec succès',
     bienUpdated: 'Bien mis à jour avec succès',
     bienDeleted: 'Bien supprimé avec succès',
@@ -189,6 +193,10 @@ var i18n = {
     cancel: 'Cancel',
     delete: 'Delete',
     confirmDelete: 'Are you sure you want to delete this asset?',
+    confirmDeleteTitle: 'Delete Confirmation',
+    confirmDeleteMsg: 'Are you sure you want to permanently delete this asset?',
+    confirmDeleteWarning: 'This action is irreversible. All data for this asset will be lost.',
+    confirmDeleteBtn: 'Delete permanently',
     bienAdded: 'Asset added successfully',
     bienUpdated: 'Asset updated successfully',
     bienDeleted: 'Asset deleted successfully',
@@ -622,7 +630,51 @@ function searchAndDelete() {
   if (!ref) return;
   var b = biens.find(function(x) { return String(x.Reference_DDC || '').trim().toLowerCase() === ref.toLowerCase(); });
   if (!b) { showToast(t('bienNotFound'), 'error'); return; }
-  deleteBien(b.id);
+  openDeleteConfirmModal(b);
+}
+
+function openDeleteConfirmModal(bien) {
+  var html = '<div class="modal-overlay" onclick="closeModal(event)">';
+  html += '<div class="modal" style="max-width:560px;">';
+  html += '<div class="modal-header-red" style="background:#dc2626;">';
+  html += '<h3>🗑️ ' + t('confirmDeleteTitle') + '</h3>';
+  html += '<button class="modal-close-white" onclick="closeModalForce()">✕</button>';
+  html += '</div>';
+  html += '<div class="modal-body" style="text-align:center;padding:30px;">';
+
+  // Warning icon
+  html += '<div style="font-size:56px;margin-bottom:16px;">⚠️</div>';
+  html += '<p style="font-size:15px;font-weight:700;color:#1e293b;margin-bottom:20px;">' + t('confirmDeleteMsg') + '</p>';
+
+  // Asset details card
+  html += '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:16px;text-align:left;margin-bottom:20px;">';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
+  html += '<div><span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;">Réf. DDC</span><br/><span style="font-weight:700;color:#1e293b;">' + sanitize(bien.Reference_DDC) + '</span></div>';
+  html += '<div><span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;">' + t('tabSearch') + '</span><br/>' + movementBadge(bien.Mouvement) + '</div>';
+  html += '<div><span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;">Commune</span><br/><span style="font-weight:600;">' + sanitize(bien.Commune || '--') + '</span></div>';
+  html += '<div><span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;">Adresse</span><br/><span style="font-weight:600;">' + sanitize(bien.Adresse || '--') + '</span></div>';
+  if (bien.Type_Bien) {
+    html += '<div><span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;">Type</span><br/><span style="font-weight:600;">' + sanitize(bien.Type_Bien) + '</span></div>';
+  }
+  if (bien.Annee) {
+    html += '<div><span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;">' + colLabel(BIEN_COLUMNS[5]) + '</span><br/><span style="font-weight:600;">' + sanitize(bien.Annee) + '</span></div>';
+  }
+  html += '</div></div>';
+
+  // Warning text
+  html += '<p style="font-size:12px;color:#dc2626;font-weight:600;">⚠️ ' + t('confirmDeleteWarning') + '</p>';
+
+  html += '</div>';
+
+  // Footer with buttons
+  html += '<div class="modal-footer" style="justify-content:center;gap:16px;">';
+  html += '<button class="btn btn-secondary" onclick="closeModalForce()" style="min-width:120px;">✕ ' + t('cancel') + '</button>';
+  html += '<button class="btn" onclick="confirmDeleteBien(' + bien.id + ')" style="min-width:120px;background:#dc2626;color:#fff;">🗑️ ' + t('confirmDeleteBtn') + '</button>';
+  html += '</div>';
+
+  html += '</div></div>';
+
+  document.getElementById('modal-container').innerHTML = html;
 }
 
 // =============================================================================
@@ -1346,9 +1398,8 @@ async function saveBien(bienId) {
   }
 }
 
-async function deleteBien(bienId) {
+async function confirmDeleteBien(bienId) {
   if (!canManage) { showToast(t('accessDenied'), 'error'); return; }
-  if (!confirm(t('confirmDelete'))) return;
 
   try {
     await grist.docApi.applyUserActions([
