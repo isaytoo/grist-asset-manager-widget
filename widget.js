@@ -1000,6 +1000,18 @@ function getFilteredBiens() {
   });
 }
 
+function contrastTextColor(hexColor) {
+  // Returns '#fff' for dark backgrounds, '#1e293b' for light backgrounds
+  var hex = hexColor.replace('#', '');
+  if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+  var r = parseInt(hex.substr(0, 2), 16);
+  var g = parseInt(hex.substr(2, 2), 16);
+  var b = parseInt(hex.substr(4, 2), 16);
+  // Relative luminance
+  var lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.55 ? '#1e293b' : '#fff';
+}
+
 function buildPieChart(slices, size) {
   // slices = [{value, color, label}], size = diameter in px
   var total = 0;
@@ -1028,14 +1040,15 @@ function buildPieChart(slices, size) {
       svg += '<path d="M ' + cx + ' ' + cy + ' L ' + x1 + ' ' + y1 + ' A ' + (r - 4) + ' ' + (r - 4) + ' 0 ' + largeArc + ' 1 ' + x2 + ' ' + y2 + ' Z" fill="' + slices[i].color + '" />';
     }
 
-    // Label in the middle of the slice
+    // Label in the middle of the slice with dynamic text color
     var midAngle = startAngle + angle / 2;
     var labelR = (r - 4) * 0.6;
     var lx = cx + labelR * Math.cos(midAngle);
     var ly = cy + labelR * Math.sin(midAngle);
     var labelVal = Math.round(Math.abs(slices[i].value)).toLocaleString() + ' m²';
+    var txtColor = contrastTextColor(slices[i].color);
     if (pct > 0.05) {
-      svg += '<text x="' + lx + '" y="' + ly + '" text-anchor="middle" dominant-baseline="central" fill="#fff" font-size="' + (size > 180 ? 12 : 10) + '" font-weight="800">' + labelVal + '</text>';
+      svg += '<text x="' + lx + '" y="' + ly + '" text-anchor="middle" dominant-baseline="central" fill="' + txtColor + '" font-size="' + (size > 180 ? 12 : 10) + '" font-weight="800" stroke="' + (txtColor === '#fff' ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.5)') + '" stroke-width="0.5">' + labelVal + '</text>';
     }
 
     startAngle = endAngle;
@@ -1184,6 +1197,16 @@ function renderDashboardView() {
     }
   }
 
+  // Store values for export functions
+  window._dashSurfAcquise = surfAcquise;
+  window._dashSurfCedee = surfCedee;
+  window._dashSurfBati = surfBatiSPI;
+  window._dashSurfNonBati = surfNonBatiSPI;
+  window._dashSpiAcq = spiAcq;
+  window._dashNoSpiAcq = noSpiAcq;
+  window._dashSpiCes = spiCes;
+  window._dashNoSpiCes = noSpiCes;
+
   var html = '<div class="section-card">';
   html += '<h3 style="display:flex;align-items:center;gap:10px;"><span style="background:#ef4444;color:#fff;padding:8px 12px;border-radius:10px;font-size:20px;">📊</span> ' + t('dashTitle') + '</h3>';
   html += '<p style="color:#64748b;margin-bottom:20px;">' + t('dashSubtitle') + '</p>';
@@ -1277,7 +1300,12 @@ function renderDashboardView() {
   var titleYearSuffix = dashFilterYears.length > 0 ? ' - ' + dashFilterYears.sort().join(', ') : '';
 
   html += '<div class="section-card" style="margin-top:20px;">';
-  html += '<h3>📊 ' + t('dashSurfaceAnalysis') + titleYearSuffix + ' <span style="font-size:12px;font-weight:400;color:#64748b;">(Gestion SPI = OUI)</span></h3>';
+  html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">';
+  html += '<h3 style="margin:0;">📊 ' + t('dashSurfaceAnalysis') + titleYearSuffix + ' <span style="font-size:12px;font-weight:400;color:#64748b;">(Gestion SPI = OUI)</span></h3>';
+  html += '<div style="display:flex;gap:6px;">';
+  html += '<button class="btn-export" onclick="exportDashExcel(\'surfaces\')">📊 Excel</button>';
+  html += '<button class="btn-export" style="background:#3b82f6;" onclick="exportDashImages(\'surface-charts\')">📷 Images</button>';
+  html += '</div></div>';
   html += filterSubtitle;
 
   // Main sub-tabs: Analyse des Surfaces | Détails des surfaces par bien
@@ -1293,7 +1321,7 @@ function renderDashboardView() {
     html += '<div class="analysis-grid">';
 
     // LEFT: Surfaces acquises / cédées with pie chart
-    html += '<div class="analysis-card" style="text-align:center;">';
+    html += '<div class="analysis-card" style="text-align:center;" id="chart-surf-acq-ced">';
     html += '<h4>' + t('dashSurfAcqCed') + '</h4>';
     html += buildPieChart([
       { value: surfAcquise, color: '#22c55e', label: 'Surfaces acquises' },
@@ -1312,7 +1340,7 @@ function renderDashboardView() {
     html += '</div>';
 
     // RIGHT: Répartition bâti / non-bâti with pie chart
-    html += '<div class="analysis-card" style="text-align:center;">';
+    html += '<div class="analysis-card" style="text-align:center;" id="chart-surf-bati">';
     html += '<h4>' + t('dashBatiNonBati') + '</h4>';
     html += buildPieChart([
       { value: surfBatiSPI, color: '#3b82f6', label: 'Surface bâti' },
@@ -1384,8 +1412,18 @@ function renderDashboardView() {
   }
   for (var i = 0; i < 12; i++) spiMonthDelta[i] = spiMonthAcq[i] - spiMonthCes[i];
 
+  // Store for export
+  window._dashSpiMonthAcq = spiMonthAcq;
+  window._dashSpiMonthCes = spiMonthCes;
+  window._dashSpiMonthDelta = spiMonthDelta;
+
   html += '<div class="section-card" style="margin-top:20px;">';
-  html += '<h3>📈 ' + t('dashGestionSPI') + titleYearSuffix + '</h3>';
+  html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">';
+  html += '<h3 style="margin:0;">📈 ' + t('dashGestionSPI') + titleYearSuffix + '</h3>';
+  html += '<div style="display:flex;gap:6px;">';
+  html += '<button class="btn-export" onclick="exportDashExcel(\'spi\')">📊 Excel</button>';
+  html += '<button class="btn-export" style="background:#3b82f6;" onclick="exportDashImages(\'spi-charts\')">📷 Images</button>';
+  html += '</div></div>';
   html += filterSubtitle;
 
   var totalActes = spiAcq + noSpiAcq + spiCes + noSpiCes;
@@ -1395,7 +1433,7 @@ function renderDashboardView() {
   html += '<div class="analysis-grid">';
 
   // LEFT: Répartition SPI pie chart
-  html += '<div class="analysis-card" style="text-align:center;">';
+  html += '<div class="analysis-card" style="text-align:center;" id="chart-spi-pie">';
   html += '<h4>Répartition SPI' + titleYearSuffix + '</h4>';
   html += filterSubtitle;
   html += buildPieChart([
@@ -1407,7 +1445,7 @@ function renderDashboardView() {
   html += '</div>';
 
   // RIGHT: Évolution SPI line chart
-  html += '<div class="analysis-card" style="text-align:center;">';
+  html += '<div class="analysis-card" style="text-align:center;" id="chart-spi-line">';
   html += '<h4>Évolution SPI' + titleYearSuffix + ' - Gestion SPI</h4>';
   html += filterSubtitle;
   html += buildLineChart(spiMonthAcq, spiMonthCes, spiMonthDelta, mfl);
@@ -1585,6 +1623,149 @@ function exportSurfaceDetails() {
     console.error('Export error:', e);
     showToast('Erreur export: ' + e.message, 'error');
   }
+}
+
+function exportDashExcel(section) {
+  try {
+    var wb = XLSX.utils.book_new();
+    var yearLabel = dashFilterYears.length === 0 ? 'Toutes_annees' : dashFilterYears.join('_');
+
+    if (section === 'surfaces') {
+      // Sheet 1: Analyse des Surfaces
+      var surfData = [
+        ['Analyse des Surfaces (Gestion SPI = OUI)'],
+        [],
+        ['Surfaces acquises / surfaces cédées'],
+        ['Type', 'Surface (m²)'],
+        ['Surfaces acquises', Math.round(window._dashSurfAcquise || 0)],
+        ['Surfaces cédées', Math.round(window._dashSurfCedee || 0)],
+        ['Écart', Math.round((window._dashSurfAcquise || 0) + (window._dashSurfCedee || 0))],
+        [],
+        ['Répartition Bâti / Non-Bâti'],
+        ['Type', 'Surface (m²)'],
+        ['Surface bâti', Math.round(window._dashSurfBati || 0)],
+        ['Surface non bâti', Math.round(window._dashSurfNonBati || 0)],
+        ['Total', Math.round((window._dashSurfBati || 0) + (window._dashSurfNonBati || 0))]
+      ];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(surfData), 'Analyse Surfaces');
+
+      // Sheet 2-5: Detail tables
+      function makeDetailSheet(rows, type) {
+        var hasType = (type === 'acq' || type === 'ces');
+        var surfLabel = type === 'bati' ? 'Surface Bâti (m²)' : type === 'nonbati' ? 'Surface Non Bâti (m²)' : 'Surface Parcelle (m²)';
+        var headers = ['Référence DDC', 'Commune', 'Adresse'];
+        if (hasType) headers.push('Type');
+        headers.push('Mouvement', surfLabel, "Date de l'acte", 'Année');
+        var data = [headers];
+        var total = 0;
+        for (var i = 0; i < rows.length; i++) {
+          var r = rows[i]; total += r.surface;
+          var row = [r.ref || '', r.commune || '', r.adresse || ''];
+          if (hasType) row.push(r.type || '');
+          row.push(r.mouvement || '', Math.round(r.surface), r.date || '', r.annee || '');
+          data.push(row);
+        }
+        var totalRow = []; for (var j = 0; j < headers.length; j++) totalRow.push('');
+        totalRow[0] = 'Total'; totalRow[hasType ? 5 : 4] = Math.round(total);
+        data.push(totalRow);
+        return XLSX.utils.aoa_to_sheet(data);
+      }
+      XLSX.utils.book_append_sheet(wb, makeDetailSheet(window._dashDetailAcq || [], 'acq'), 'Acquisitions');
+      XLSX.utils.book_append_sheet(wb, makeDetailSheet(window._dashDetailCes || [], 'ces'), 'Cessions');
+      XLSX.utils.book_append_sheet(wb, makeDetailSheet(window._dashDetailBati || [], 'bati'), 'Bâti');
+      XLSX.utils.book_append_sheet(wb, makeDetailSheet(window._dashDetailNonBati || [], 'nonbati'), 'Non Bâti');
+
+      XLSX.writeFile(wb, 'Analyse_Surfaces_' + yearLabel + '.xlsx');
+
+    } else if (section === 'spi') {
+      // Sheet 1: Répartition SPI
+      var spiData = [
+        ['Gestion SPI'],
+        [],
+        ['Répartition SPI'],
+        ['Catégorie', 'Nombre de biens'],
+        ['Gestion SPI - Tous mouvements sauf Cession', window._dashSpiAcq || 0],
+        ['Pas de Gestion SPI - Tous mouvements sauf Cession', window._dashNoSpiAcq || 0],
+        ['Gestion SPI - Cession', window._dashSpiCes || 0],
+        ['Pas de Gestion SPI - Cession', window._dashNoSpiCes || 0],
+        [],
+        ['Statistiques SPI par type d\'acte'],
+        ['Type d\'acte', 'Total', 'Dont actes pour biens entrants en gestion au SPI'],
+        ['Acquisitions', (window._dashSpiAcq || 0) + (window._dashNoSpiAcq || 0), window._dashSpiAcq || 0],
+        ['Cessions', (window._dashSpiCes || 0) + (window._dashNoSpiCes || 0), window._dashSpiCes || 0],
+        ['Total', (window._dashSpiAcq || 0) + (window._dashNoSpiAcq || 0) + (window._dashSpiCes || 0) + (window._dashNoSpiCes || 0), (window._dashSpiAcq || 0) + (window._dashSpiCes || 0)]
+      ];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(spiData), 'Gestion SPI');
+
+      // Sheet 2: Évolution mensuelle
+      var moisNoms = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
+      var evoData = [['Évolution Mensuelle SPI (Gestion SPI = OUI)'], ['Mois', 'Acquisitions', 'Cessions', 'Delta']];
+      var acqM = window._dashSpiMonthAcq || [];
+      var cesM = window._dashSpiMonthCes || [];
+      var delM = window._dashSpiMonthDelta || [];
+      for (var i = 0; i < 12; i++) {
+        evoData.push([moisNoms[i], acqM[i] || 0, cesM[i] || 0, delM[i] || 0]);
+      }
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(evoData), 'Évolution Mensuelle');
+
+      XLSX.writeFile(wb, 'Gestion_SPI_' + yearLabel + '.xlsx');
+    }
+
+    showToast(t('dashExportDone'), 'success');
+  } catch (e) {
+    console.error('Export error:', e);
+    showToast('Erreur export: ' + e.message, 'error');
+  }
+}
+
+function exportDashImages(section) {
+  var ids = [];
+  if (section === 'surface-charts') {
+    ids = ['chart-surf-acq-ced', 'chart-surf-bati'];
+  } else if (section === 'spi-charts') {
+    ids = ['chart-spi-pie', 'chart-spi-line'];
+  }
+
+  ids.forEach(function(id, idx) {
+    setTimeout(function() {
+      var el = document.getElementById(id);
+      if (!el) return;
+      var svgEl = el.querySelector('svg');
+      if (!svgEl) return;
+
+      // Clone SVG and add white background
+      var clone = svgEl.cloneNode(true);
+      var bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      bgRect.setAttribute('width', '100%');
+      bgRect.setAttribute('height', '100%');
+      bgRect.setAttribute('fill', '#ffffff');
+      clone.insertBefore(bgRect, clone.firstChild);
+
+      var svgData = new XMLSerializer().serializeToString(clone);
+      var svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+
+      var canvas = document.createElement('canvas');
+      var ctx = canvas.getContext('2d');
+      var img = new Image();
+      img.onload = function() {
+        canvas.width = img.width * 2;
+        canvas.height = img.height * 2;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(function(blob) {
+          var a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = id + '.png';
+          a.click();
+          URL.revokeObjectURL(a.href);
+        }, 'image/png');
+      };
+      img.src = URL.createObjectURL(svgBlob);
+    }, idx * 500);
+  });
+
+  showToast(currentLang === 'fr' ? 'Export images en cours...' : 'Exporting images...', 'success');
 }
 
 // =============================================================================
