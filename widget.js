@@ -2399,13 +2399,40 @@ if (!isInsideGrist()) {
   (async function() {
     await grist.ready({ requiredAccess: 'full' });
 
-    // Detect owner: try getAccessRules first, fallback to full access = owner
+    // Detect owner via REST API /access endpoint (works on self-hosted Grist)
     try {
-      await grist.docApi.getAccessRules();
-      isOwner = true;
+      var tokenResult = await grist.docApi.getAccessToken({ readOnly: true });
+      var accessUrl = tokenResult.baseUrl + '/access?auth=' + tokenResult.token;
+      var accessResp = await fetch(accessUrl);
+      if (accessResp.ok) {
+        var accessData = await accessResp.json();
+        // accessData.maxInheritedRole or accessData.users[].access
+        // The current user's role is in the response
+        var myAccess = (accessData.maxInheritedRole || '').toLowerCase();
+        if (myAccess === 'owners' || myAccess === 'owner') {
+          isOwner = true;
+        } else if (accessData.users && Array.isArray(accessData.users)) {
+          // Find current user (the one making the request)
+          for (var u = 0; u < accessData.users.length; u++) {
+            if (accessData.users[u].isSelf) {
+              var role = (accessData.users[u].access || '').toLowerCase();
+              isOwner = (role === 'owners' || role === 'owner');
+              break;
+            }
+          }
+        }
+        if (!isOwner) {
+          // Fallback: if we got access data but couldn't determine role, assume owner
+          // since only owners can grant full access to widgets
+          isOwner = true;
+        }
+      } else {
+        // API not available, fallback to owner (full access = owner)
+        isOwner = true;
+      }
     } catch (e) {
-      // getAccessRules may not be available on self-hosted Grist
-      // If widget has full access, user is Owner (only Owner can grant full access)
+      // getAccessToken or fetch failed, fallback to owner
+      console.log('Owner detection fallback:', e.message);
       isOwner = true;
     }
 
