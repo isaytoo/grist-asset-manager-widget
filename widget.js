@@ -2313,6 +2313,7 @@ async function removeGestionnaire(gId) {
 // =============================================================================
 
 async function ensureTables() {
+  if (!canManage) { console.log('Skip ensureTables: read-only user'); return; }
   try {
     var tables = await grist.docApi.listTables();
 
@@ -2356,16 +2357,18 @@ async function loadAllData() {
     console.error('Error loading biens:', e);
   }
 
-  try {
-    var gestData = await grist.docApi.fetchTable(GESTIONNAIRES_TABLE);
-    gestionnaires = [];
-    if (gestData && gestData.id) {
-      for (var i = 0; i < gestData.id.length; i++) {
-        gestionnaires.push({ id: gestData.id[i], Email: gestData.Email ? gestData.Email[i] : '' });
+  if (canManage) {
+    try {
+      var gestData = await grist.docApi.fetchTable(GESTIONNAIRES_TABLE);
+      gestionnaires = [];
+      if (gestData && gestData.id) {
+        for (var i = 0; i < gestData.id.length; i++) {
+          gestionnaires.push({ id: gestData.id[i], Email: gestData.Email ? gestData.Email[i] : '' });
+        }
       }
+    } catch (e) {
+      console.error('Error loading gestionnaires:', e);
     }
-  } catch (e) {
-    console.error('Error loading gestionnaires:', e);
   }
 
   // Update canManage based on gestionnaires
