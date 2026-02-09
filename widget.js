@@ -2402,64 +2402,47 @@ if (!isInsideGrist()) {
   (async function() {
     await grist.ready({ requiredAccess: 'full' });
 
-    // Detect owner via REST API /access endpoint (works on self-hosted Grist)
+    // Detect owner using multiple methods:
+    // 1. Try applyUserActions with empty array - only owners/editors can modify docs
+    //    In "View As" viewer mode, this will fail with "Only owners or editors can modify"
+    // 2. If that succeeds, try getAccessRules to distinguish owner from editor
+    //    Only owners can read access rules
+    var canWrite = false;
     try {
-      var tokenResult = await grist.docApi.getAccessToken({ readOnly: true });
-      var accessUrl = tokenResult.baseUrl + '/access?auth=' + tokenResult.token;
-      var accessResp = await fetch(accessUrl);
-      if (accessResp.ok) {
-        var accessData = await accessResp.json();
-        console.log('Access data:', JSON.stringify(accessData));
-        var ownerDetected = false;
-        // Method 1: check users array for isSelf flag
-        if (accessData.users && Array.isArray(accessData.users)) {
-          for (var u = 0; u < accessData.users.length; u++) {
-            var usr = accessData.users[u];
-            if (usr.isSelf) {
-              var role = (usr.access || '').toLowerCase();
-              console.log('Current user role (isSelf):', role);
-              isOwner = (role === 'owners' || role === 'owner');
-              ownerDetected = true;
-              break;
-            }
-          }
-        }
-        // Method 2: if no isSelf found, check maxInheritedRole
-        if (!ownerDetected && accessData.maxInheritedRole) {
-          var inherited = accessData.maxInheritedRole.toLowerCase();
-          console.log('maxInheritedRole:', inherited);
-          isOwner = (inherited === 'owners' || inherited === 'owner');
-          ownerDetected = true;
-        }
-        // Method 3: if still not detected, try _grist_ACLRules table (only owner can read it)
-        if (!ownerDetected) {
-          try {
-            await grist.docApi.fetchTable('_grist_ACLRules');
-            isOwner = true;
-            console.log('Owner detected via _grist_ACLRules access');
-          } catch (aclErr) {
-            isOwner = false;
-            console.log('Not owner: cannot read _grist_ACLRules');
-          }
-        }
-      } else {
-        // /access returned error - try _grist_ACLRules fallback
-        try {
-          await grist.docApi.fetchTable('_grist_ACLRules');
-          isOwner = true;
-        } catch (aclErr) {
-          isOwner = false;
-        }
-      }
+      await grist.docApi.applyUserActions([]);
+      canWrite = true;
+      console.log('User can write (owner or editor)');
     } catch (e) {
-      // getAccessToken failed - try _grist_ACLRules fallback
-      console.log('Owner detection via /access failed:', e.message);
+      canWrite = false;
+      console.log('User cannot write:', e.message);
+    }
+
+    if (canWrite) {
+      // User can write - check if owner (can read access rules) or just editor
       try {
-        await grist.docApi.fetchTable('_grist_ACLRules');
+        await grist.docApi.getAccessRules();
         isOwner = true;
-      } catch (aclErr) {
-        isOwner = false;
+        console.log('User is Owner (can read access rules)');
+      } catch (e) {
+        // Can write but can't read access rules = editor, not owner
+        // However on self-hosted Grist, getAccessRules may not work even for owners
+        // In that case, try fetchTable on _grist_ACLRules as additional check
+        try {
+          var aclData = await grist.docApi.fetchTable('_grist_ACLRules');
+          // If we get here AND the data has rules, we're likely owner
+          isOwner = true;
+          console.log('User is Owner (can read _grist_ACLRules)');
+        } catch (e2) {
+          // Can write but can't read ACL = editor
+          isOwner = false;
+          console.log('User is Editor (can write but not read ACL rules)');
+        }
       }
+    } else {
+      // User cannot write = viewer
+      isOwner = false;
+      canManage = false;
+      console.log('User is Viewer (read-only)');
     }
     console.log('isOwner:', isOwner);
 
