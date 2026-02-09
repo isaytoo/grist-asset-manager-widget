@@ -1069,9 +1069,9 @@ function renderDashboardView() {
   var mouvementCount = {};
   var communeCount = {};
 
-  // SPI stats
+  // SPI stats: CESSION = cession, everything else = acquisition (like reference app)
   var spiAcq = 0, spiCes = 0, noSpiAcq = 0, noSpiCes = 0;
-  // Surface analysis
+  // Surface analysis (SPI=OUI only)
   var surfAcquise = 0, surfCedee = 0;
   var surfBatiSPI = 0, surfNonBatiSPI = 0;
 
@@ -1080,22 +1080,33 @@ function renderDashboardView() {
     if (b.Commune) { communesSet[b.Commune] = true; communeCount[b.Commune] = (communeCount[b.Commune] || 0) + 1; }
     var sp = parseNum(b.Surface_Parcelle);
     var sb = parseNum(b.Surface_Bati);
-    surfaceParcelle += sp;
-    surfaceBati += sb;
+    surfaceParcelle += Math.abs(sp);
+    surfaceBati += Math.abs(sb);
     if (b.Mouvement) mouvementCount[b.Mouvement] = (mouvementCount[b.Mouvement] || 0) + 1;
 
     var mouv = String(b.Mouvement || '').toUpperCase();
     var isSPI = String(b.Gestion_SPI || '').toUpperCase() === 'OUI';
-    var isAcq = mouv.indexOf('ACQUISITION') !== -1 || mouv.indexOf('PREEMPTION') !== -1 || mouv.indexOf('PRÉEMPTION') !== -1 || mouv.indexOf('EXPROPRIATION') !== -1 || mouv.indexOf('SERVITUDE') !== -1;
     var isCes = mouv.indexOf('CESSION') !== -1;
 
-    if (isAcq) {
-      if (isSPI) { spiAcq++; surfAcquise += sp; surfBatiSPI += sb; surfNonBatiSPI += Math.max(0, sp - sb); }
-      else noSpiAcq++;
+    // Surface analysis: SPI only, totalSurface = surfaceBati + surfaceParcelle per item
+    if (isSPI) {
+      var totalSurfItem = sb + sp; // Both can be negative for cessions
+      surfBatiSPI += sb;
+      surfNonBatiSPI += sp;
+      if (isCes) {
+        surfCedee += totalSurfItem;
+      } else {
+        surfAcquise += totalSurfItem;
+      }
     }
+
+    // SPI stats: CESSION = cession, everything else = acquisition
     if (isCes) {
-      if (isSPI) { spiCes++; surfCedee += sp; }
+      if (isSPI) spiCes++;
       else noSpiCes++;
+    } else {
+      if (isSPI) spiAcq++;
+      else noSpiAcq++;
     }
   }
 
@@ -1148,19 +1159,20 @@ function renderDashboardView() {
     var mouvB = String(b.Mouvement || '').toUpperCase();
     var spB = parseNum(b.Surface_Parcelle);
     var sbB = parseNum(b.Surface_Bati);
-    var isAcqB = mouvB.indexOf('ACQUISITION') !== -1 || mouvB.indexOf('PREEMPTION') !== -1 || mouvB.indexOf('PRÉEMPTION') !== -1 || mouvB.indexOf('EXPROPRIATION') !== -1 || mouvB.indexOf('SERVITUDE') !== -1;
     var isCesB = mouvB.indexOf('CESSION') !== -1;
-    if (isAcqB) {
-      detailAcq.push({ ref: b.Reference_DDC, commune: b.Commune, adresse: b.Adresse, type: b.Type_Bien, mouvement: b.Mouvement, surface: spB, date: b.Date_Acte, annee: b.Annee });
-      if (sbB > 0) detailBati.push({ ref: b.Reference_DDC, commune: b.Commune, adresse: b.Adresse, mouvement: b.Mouvement, surface: sbB, date: b.Date_Acte, annee: b.Annee });
-      var nonBatiB = spB - sbB;
-      if (nonBatiB > 0) detailNonBati.push({ ref: b.Reference_DDC, commune: b.Commune, adresse: b.Adresse, mouvement: b.Mouvement, surface: nonBatiB, date: b.Date_Acte, annee: b.Annee });
-    }
+    // CESSION = cession, everything else = acquisition (like reference app)
     if (isCesB) {
       detailCes.push({ ref: b.Reference_DDC, commune: b.Commune, adresse: b.Adresse, type: b.Type_Bien, mouvement: b.Mouvement, surface: spB, date: b.Date_Acte, annee: b.Annee });
-      if (sbB > 0) detailBati.push({ ref: b.Reference_DDC, commune: b.Commune, adresse: b.Adresse, mouvement: b.Mouvement, surface: -sbB, date: b.Date_Acte, annee: b.Annee });
-      var nonBatiC = spB - sbB;
-      if (nonBatiC > 0) detailNonBati.push({ ref: b.Reference_DDC, commune: b.Commune, adresse: b.Adresse, mouvement: b.Mouvement, surface: -nonBatiC, date: b.Date_Acte, annee: b.Annee });
+    } else {
+      detailAcq.push({ ref: b.Reference_DDC, commune: b.Commune, adresse: b.Adresse, type: b.Type_Bien, mouvement: b.Mouvement, surface: spB, date: b.Date_Acte, annee: b.Annee });
+    }
+    // Bâti: all SPI items with surfaceBati
+    if (sbB !== 0) {
+      detailBati.push({ ref: b.Reference_DDC, commune: b.Commune, adresse: b.Adresse, mouvement: b.Mouvement, surface: sbB, date: b.Date_Acte, annee: b.Annee });
+    }
+    // Non Bâti: all SPI items with surfaceParcelle (= surface non bâti in reference app)
+    if (spB !== 0) {
+      detailNonBati.push({ ref: b.Reference_DDC, commune: b.Commune, adresse: b.Adresse, mouvement: b.Mouvement, surface: spB, date: b.Date_Acte, annee: b.Annee });
     }
   }
   detailAcq.sort(function(a, b) { return b.surface - a.surface; });
@@ -1201,7 +1213,7 @@ function renderDashboardView() {
   html += '</div>';
 
   if (dashSurfaceTab === 'analyse') {
-    var ecart = surfAcquise - surfCedee;
+    var ecart = surfAcquise + surfCedee; // cedees is already negative
     var totalSurf = surfBatiSPI + surfNonBatiSPI;
 
     html += '<div class="analysis-grid">';
@@ -1220,7 +1232,7 @@ function renderDashboardView() {
     html += '</div>';
     html += '<div style="display:flex;gap:0;">';
     html += '<div style="flex:1;padding:8px 4px;text-align:center;font-weight:800;font-size:13px;color:#22c55e;">' + Math.round(surfAcquise).toLocaleString() + ' m²</div>';
-    html += '<div style="flex:1;padding:8px 4px;text-align:center;font-weight:800;font-size:13px;color:#ef4444;">-' + Math.round(surfCedee).toLocaleString() + ' m²</div>';
+    html += '<div style="flex:1;padding:8px 4px;text-align:center;font-weight:800;font-size:13px;color:#ef4444;">' + Math.round(surfCedee).toLocaleString() + ' m²</div>';
     html += '<div style="flex:1;padding:8px 4px;text-align:center;font-weight:800;font-size:13px;color:#1e293b;">' + Math.round(ecart).toLocaleString() + ' m²</div>';
     html += '</div>';
     html += '</div>';
