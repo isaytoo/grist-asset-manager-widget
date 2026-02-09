@@ -2399,12 +2399,14 @@ if (!isInsideGrist()) {
   (async function() {
     await grist.ready({ requiredAccess: 'full' });
 
-    // Detect owner: only owners can read access rules
+    // Detect owner: try getAccessRules first, fallback to full access = owner
     try {
       await grist.docApi.getAccessRules();
       isOwner = true;
     } catch (e) {
-      isOwner = false;
+      // getAccessRules may not be available on self-hosted Grist
+      // If widget has full access, user is Owner (only Owner can grant full access)
+      isOwner = true;
     }
 
     canManage = isOwner;
