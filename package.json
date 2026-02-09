@@ -1,0 +1,9 @@
+{
+  "name": "grist-asset-manager-widget",
+  "version": "1.0.0",
+  "description": "Grist widget for real estate asset management (CRUD, search, dashboard)",
+  "main": "index.html",
+  "scripts": {},
+  "author": "Said Hamadou",
+  "license": "Apache-2.0"
+}
