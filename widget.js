@@ -350,6 +350,90 @@ function parseNum(val) {
   return isNaN(n) ? 0 : n;
 }
 
+// =============================================================================
+// DATA STANDARDIZATION (from patrimoine-moderne/dataStandardization.ts)
+// =============================================================================
+
+var COMMUNE_STANDARDISATIONS = {
+  'LYON 1ER': 'LYON 1', 'LYON 2EME': 'LYON 2', 'LYON 3EME': 'LYON 3',
+  'LYON 4EME': 'LYON 4', 'LYON 5EME': 'LYON 5', 'LYON 6EME': 'LYON 6',
+  'LYON 7EME': 'LYON 7', 'LYON 8EME': 'LYON 8', 'LYON 9EME': 'LYON 9',
+  'SAINT-PRIEST': 'SAINT PRIEST', 'SAINTE-FOY-LES-LYON': 'SAINTE FOY LES LYON',
+  'PIERRE-BENITE': 'PIERRE BENITE', 'PIERRE-BÉNITE': 'PIERRE BENITE',
+  'SAINT-GENIS-LAVAL': 'SAINT GENIS LAVAL',
+  'ALBIGNY-SUR-SAÔNE': 'ALBIGNY SUR SAONE', 'CALUIRE-ET-CUIRE': 'CALUIRE ET CUIRE',
+  "CHAMPAGNE-AU-MONT-D'OR": "CHAMPAGNE AU MONT D'OR",
+  'CHARBONNIÈRES-LES-BAINS': 'CHARBONNIERES LES BAINS',
+  "COLLONGES-AU-MONT-D'OR": "COLLONGES AU MONT D'OR",
+  "COUZON-AU-MONT-D'OR": "COUZON AU MONT D'OR",
+  "CURIS-AU-MONT-D'OR": "CURIS AU MONT D'OR",
+  'DÉCINES-CHARPIEU': 'DECINES CHARPIEU', 'DECINES-CHARPIEU': 'DECINES CHARPIEU',
+  'FLEURIEU-SUR-SAÔNE': 'FLEURIEU SUR SAONE',
+  'FONTAINES-SAINT-MARTIN': 'FONTAINES SAINT MARTIN',
+  'FONTAINES-SUR-SAÔNE': 'FONTAINES SUR SAONE',
+  'LA MULATIÈRE': 'LA MULATIERE', 'LA TOUR-DE-SALVAGNY': 'LA TOUR DE SALVAGNY',
+  "MARCY-L'ETOILE": "MARCY L'ETOILE",
+  'NEUVILLE-SUR-SAÔNE': 'NEUVILLE SUR SAONE',
+  'ROCHETAILLÉ-SUR-SAÔNE': 'ROCHETAILLE SUR SAONE',
+  "SAINT-CYR-AU-MONT-D'OR": "SAINT CYR AU MONT D'OR",
+  "SAINT-DIDIER-AU-MONT-D'OR": "SAINT DIDIER AU MONT D'OR",
+  'SAINT-GENIS-LES-OLLIÈRES': 'SAINT GENIS LES OLLIERES',
+  "SAINT-GERMAIN-AU-MONT-D'OR": "SAINT GERMAIN AU MONT D'OR",
+  'SAINT-PIERRE-DE-CHANDIEU': 'SAINT PIERRE DE CHANDIEU',
+  "SAINT-ROMAIN-AU-MONT-D'OR": "SAINT ROMAIN AU MONT D'OR",
+  'SATHONAY-CAMP': 'SATHONAY CAMP', 'SATHONAY-CAMPS': 'SATHONAY CAMP',
+  'SATHONAY-VILLAGE': 'SATHONAY VILLAGE',
+  'TASSIN-LA-DEMI-LUNE': 'TASSIN LA DEMI LUNE',
+  'VAULX-EN-VELIN': 'VAULX EN VELIN', 'VÉNISSIEUX': 'VENISSIEUX',
+  'CAILLOUX-SUR-FONTAINES': 'CAILLOUX SUR FONTAINES'
+};
+
+function removeAccents(str) {
+  return str
+    .replace(/[àáâãäå]/gi, 'a').replace(/[èéêë]/gi, 'e')
+    .replace(/[ìíîï]/gi, 'i').replace(/[òóôõö]/gi, 'o')
+    .replace(/[ùúûü]/gi, 'u').replace(/[ç]/gi, 'c')
+    .replace(/[ñ]/gi, 'n').replace(/[ÿ]/gi, 'y')
+    .replace(/[æ]/gi, 'ae').replace(/[œ]/gi, 'oe');
+}
+
+function standardiserCommune(commune) {
+  if (!commune) return '';
+  commune = removeAccents(commune.trim()).toUpperCase();
+  // Lyon arrondissements
+  if (commune.indexOf('LYON ') === 0) {
+    var match = commune.match(/LYON\s+(\d+)/);
+    if (match) return 'LYON ' + match[1];
+  }
+  return COMMUNE_STANDARDISATIONS[commune] || commune;
+}
+
+function standardiserMouvement(mouvement) {
+  if (!mouvement) return '';
+  var m = mouvement.trim().toUpperCase();
+  if (m.indexOf('ANNULATION EEDV') !== -1) return 'ANNULATION EEDV-RCP';
+  if (m === 'PRÉEMPTION' || m === 'PREEMPTION') return 'PRÉEMPTION';
+  if (m === 'EXPROPRIATION') return 'EXPROPRIATION';
+  if (m === 'SERVITUDE') return 'SERVITUDE';
+  if (m === 'LIBÉRATION' || m === 'LIBERATION') return 'LIBÉRATION';
+  if (m.indexOf('ACQUISITION') !== -1 || m.indexOf('ACHAT') !== -1 || m.indexOf('TRANSFERT') !== -1 || m.indexOf('DONATION') !== -1 || m.indexOf('LEGS') !== -1 || m.indexOf('INCORPORATION') !== -1) return 'ACQUISITION';
+  if (m.indexOf('CESSION') !== -1 || m.indexOf('VENTE') !== -1) return 'CESSION';
+  if (m.indexOf('ECHANGE') !== -1 || m.indexOf('ÉCHANGE') !== -1) return 'ÉCHANGE';
+  return m;
+}
+
+function standardiserTypeBien(type) {
+  if (!type) return '';
+  var t = type.trim().toUpperCase();
+  if (t.indexOf('NON') !== -1 && (t.indexOf('BATI') !== -1 || t.indexOf('BÂTI') !== -1)) return 'NON BÂTI';
+  if ((t.indexOf('BATI') !== -1 || t.indexOf('BÂTI') !== -1) && t.indexOf('TERRAIN') !== -1) return 'BÂTI AVEC TERRAIN';
+  if ((t.indexOf('BATI') !== -1 || t.indexOf('BÂTI') !== -1) && t.indexOf('SANS') !== -1) return 'BÂTI SANS TERRAIN';
+  if (t.indexOf('INDUSTRIEL') !== -1) return 'BÂTI TYPE INDUSTRIEL';
+  if (t.indexOf('BATI') !== -1 || t.indexOf('BÂTI') !== -1) return 'BÂTI';
+  if (t.indexOf('TERRAIN') !== -1) return 'TERRAIN';
+  return t;
+}
+
 function movementBadge(mouvement) {
   if (!mouvement) return '<span class="badge badge-other">--</span>';
   var m = mouvement.toUpperCase().trim();
@@ -407,7 +491,14 @@ function getUniqueValues(field) {
   var vals = {};
   for (var i = 0; i < biens.length; i++) {
     var v = biens[i][field];
-    if (v && String(v).trim()) vals[String(v).trim()] = true;
+    if (v && String(v).trim()) {
+      var raw = String(v).trim();
+      var standardized = raw;
+      if (field === 'Commune') standardized = standardiserCommune(raw);
+      else if (field === 'Mouvement') standardized = standardiserMouvement(raw);
+      else if (field === 'Type_Bien') standardized = standardiserTypeBien(raw);
+      if (standardized) vals[standardized] = true;
+    }
   }
   return Object.keys(vals).sort();
 }
@@ -831,11 +922,11 @@ function doSearch() {
 
   searchResults = biens.filter(function(b) {
     if (ref && String(b.Reference_DDC || '').toLowerCase().indexOf(ref) === -1) return false;
-    if (commune && b.Commune !== commune) return false;
-    if (mouvement && b.Mouvement !== mouvement) return false;
+    if (commune && standardiserCommune(b.Commune) !== commune) return false;
+    if (mouvement && standardiserMouvement(b.Mouvement) !== mouvement) return false;
     if (adresse && String(b.Adresse || '').toLowerCase().indexOf(adresse) === -1) return false;
     if (parcelle && String(b.Ref_Parcelles || '').toLowerCase().indexOf(parcelle) === -1) return false;
-    if (type && b.Type_Bien !== type) return false;
+    if (type && standardiserTypeBien(b.Type_Bien) !== type) return false;
     if (annee && String(b.Annee) !== annee) return false;
     if (site && String(b.Num_Site || '').toLowerCase().indexOf(site) === -1) return false;
     return true;
