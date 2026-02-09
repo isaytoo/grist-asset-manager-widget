@@ -953,20 +953,45 @@ var dashFilterMonths = []; // empty = all months
 var dashSurfaceTab = 'analyse'; // 'analyse' or 'details'
 var dashDetailTab = 'acq'; // 'acq', 'ces', 'bati', 'nonbati'
 
+function parseMonthFromDate(dateVal) {
+  if (!dateVal && dateVal !== 0) return 0;
+  var s = String(dateVal).trim();
+  // Case 1: Excel serial number (pure number like 41449)
+  var num = Number(s);
+  if (!isNaN(num) && num > 1000 && s.indexOf('/') === -1 && s.indexOf('-') === -1) {
+    // Excel serial: days since 1899-12-30
+    var d = new Date((num - 25569) * 86400000);
+    return d.getUTCMonth() + 1; // 1-12
+  }
+  // Case 2: DD/MM/YYYY or DD-MM-YYYY (European)
+  var match = s.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+  if (match) {
+    var a = parseInt(match[1], 10);
+    var b = parseInt(match[2], 10);
+    var c = parseInt(match[3], 10);
+    // If first part > 12, it's DD/MM/YYYY
+    if (a > 12 && b >= 1 && b <= 12) return b;
+    // If second part > 12, it's MM/DD/YYYY
+    if (b > 12 && a >= 1 && a <= 12) return a;
+    // Ambiguous: if year part is 4 digits and >= 2000, assume DD/MM/YYYY (European)
+    if (c >= 2000 && a >= 1 && a <= 31 && b >= 1 && b <= 12) return b;
+    // Otherwise assume M/DD/YY (American, like the Excel source)
+    if (a >= 1 && a <= 12) return a;
+    if (b >= 1 && b <= 12) return b;
+  }
+  // Case 3: ISO YYYY-MM-DD
+  var iso = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if (iso) return parseInt(iso[2], 10);
+  return 0;
+}
+
 function getFilteredBiens() {
   return biens.filter(function(b) {
     // Year filter (multi-select)
     if (dashFilterYears.length > 0 && dashFilterYears.indexOf(String(b.Annee)) === -1) return false;
     // Month filter (multi-select)
     if (dashFilterMonths.length > 0) {
-      var dateStr = String(b.Date_Acte || '');
-      var month = 0;
-      var parts = dateStr.split(/[\/\-\.]/);
-      if (parts.length >= 2) {
-        var m = parseInt(parts[0], 10);
-        if (m >= 1 && m <= 12) month = m;
-        else { m = parseInt(parts[1], 10); if (m >= 1 && m <= 12) month = m; }
-      }
+      var month = parseMonthFromDate(b.Date_Acte);
       if (dashFilterMonths.indexOf(String(month)) === -1) return false;
     }
     return true;
