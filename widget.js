@@ -1227,12 +1227,12 @@ function renderDashboardView() {
     ], 200);
     html += '<div style="display:flex;gap:0;margin-top:16px;border-radius:8px;overflow:hidden;">';
     html += '<div style="flex:1;background:#22c55e;color:#fff;padding:8px 4px;text-align:center;font-weight:700;font-size:11px;">Acquisitions</div>';
-    html += '<div style="flex:1;background:#ef4444;color:#fff;padding:8px 4px;text-align:center;font-weight:700;font-size:11px;">Cessions</div>';
+    html += '<div style="flex:1;background:#d97706;color:#fff;padding:8px 4px;text-align:center;font-weight:700;font-size:11px;">Cessions</div>';
     html += '<div style="flex:1;background:#dc2626;color:#fff;padding:8px 4px;text-align:center;font-weight:700;font-size:11px;">Écart</div>';
     html += '</div>';
     html += '<div style="display:flex;gap:0;">';
     html += '<div style="flex:1;padding:8px 4px;text-align:center;font-weight:800;font-size:13px;color:#22c55e;">' + Math.round(surfAcquise).toLocaleString() + ' m²</div>';
-    html += '<div style="flex:1;padding:8px 4px;text-align:center;font-weight:800;font-size:13px;color:#ef4444;">' + Math.round(surfCedee).toLocaleString() + ' m²</div>';
+    html += '<div style="flex:1;padding:8px 4px;text-align:center;font-weight:800;font-size:13px;color:#d97706;">' + Math.round(surfCedee).toLocaleString() + ' m²</div>';
     html += '<div style="flex:1;padding:8px 4px;text-align:center;font-weight:800;font-size:13px;color:#1e293b;">' + Math.round(ecart).toLocaleString() + ' m²</div>';
     html += '</div>';
     html += '</div>';
