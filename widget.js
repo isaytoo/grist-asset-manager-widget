@@ -2402,47 +2402,48 @@ if (!isInsideGrist()) {
   (async function() {
     await grist.ready({ requiredAccess: 'full' });
 
-    // Detect owner using multiple methods:
-    // 1. Try applyUserActions with empty array - only owners/editors can modify docs
-    //    In "View As" viewer mode, this will fail with "Only owners or editors can modify"
-    // 2. If that succeeds, try getAccessRules to distinguish owner from editor
-    //    Only owners can read access rules
-    var canWrite = false;
+    // Detect owner via REST /access endpoint.
+    // In Grist "View As" mode, /access returns 403 for non-owners (editors/viewers)
+    // even though the widget token is the Owner's. This is the ONLY reliable method.
+    // Fallback to _grist_ACLRules only if /access itself is unreachable (network/token error).
     try {
-      await grist.docApi.applyUserActions([]);
-      canWrite = true;
-      console.log('User can write (owner or editor)');
-    } catch (e) {
-      canWrite = false;
-      console.log('User cannot write:', e.message);
-    }
+      var tokenResult = await grist.docApi.getAccessToken({ readOnly: true });
+      var accessUrl = tokenResult.baseUrl + '/access?auth=' + tokenResult.token;
+      console.log('Checking /access endpoint...');
+      var accessResp = await fetch(accessUrl);
+      console.log('/access response status:', accessResp.status);
 
-    if (canWrite) {
-      // User can write - check if owner (can read access rules) or just editor
-      try {
-        await grist.docApi.getAccessRules();
-        isOwner = true;
-        console.log('User is Owner (can read access rules)');
-      } catch (e) {
-        // Can write but can't read access rules = editor, not owner
-        // However on self-hosted Grist, getAccessRules may not work even for owners
-        // In that case, try fetchTable on _grist_ACLRules as additional check
-        try {
-          var aclData = await grist.docApi.fetchTable('_grist_ACLRules');
-          // If we get here AND the data has rules, we're likely owner
-          isOwner = true;
-          console.log('User is Owner (can read _grist_ACLRules)');
-        } catch (e2) {
-          // Can write but can't read ACL = editor
-          isOwner = false;
-          console.log('User is Editor (can write but not read ACL rules)');
+      if (accessResp.ok) {
+        // /access succeeded - parse to confirm owner role
+        var accessData = await accessResp.json();
+        isOwner = true; // Only owners can call /access
+        // Double-check with isSelf if available
+        if (accessData.users && Array.isArray(accessData.users)) {
+          for (var u = 0; u < accessData.users.length; u++) {
+            if (accessData.users[u].isSelf) {
+              var role = (accessData.users[u].access || '').toLowerCase();
+              console.log('Current user role (isSelf):', role);
+              isOwner = (role === 'owners' || role === 'owner');
+              break;
+            }
+          }
         }
+        console.log('Owner detected via /access');
+      } else if (accessResp.status === 403) {
+        // 403 = user is NOT owner (editor or viewer in "View As" mode)
+        isOwner = false;
+        console.log('Not owner: /access returned 403');
+      } else {
+        // Other HTTP error - unexpected, fallback
+        console.log('/access returned unexpected status:', accessResp.status);
+        isOwner = true; // Widget has full access = owner configured it
       }
-    } else {
-      // User cannot write = viewer
-      isOwner = false;
-      canManage = false;
-      console.log('User is Viewer (read-only)');
+    } catch (e) {
+      // getAccessToken or fetch failed entirely (network error, no token support)
+      // This happens on some self-hosted Grist versions without token support
+      console.log('Owner detection via /access failed:', e.message);
+      // Fallback: only owners can grant full access to widgets
+      isOwner = true;
     }
     console.log('isOwner:', isOwner);
 
