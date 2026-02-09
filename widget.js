@@ -757,7 +757,7 @@ function buildFormHtml(bien) {
     html += '<option value="' + mouvementOptions[i] + '"' + (v('Mouvement') === mouvementOptions[i] ? ' selected' : '') + '>' + (mouvementOptions[i] || t('select')) + '</option>';
   }
   html += '</select></div>';
-  html += '<div class="form-group"><label>Date de l\'acte</label><input type="text" id="f-Date_Acte" value="' + v('Date_Acte') + '" placeholder="jj/mm/aaaa" /></div>';
+  html += '<div class="form-group"><label>Date de l\'acte</label><input type="date" id="f-Date_Acte" value="' + v('Date_Acte') + '" /></div>';
   html += '<div class="form-group"><label>Année</label><input type="text" id="f-Annee" value="' + v('Annee') + '" /></div>';
   html += '</div></div>';
 
@@ -843,7 +843,7 @@ function buildFormHtml(bien) {
     html += '<option value="' + saisiesOptions[i] + '"' + (v('Saisies_Manuelles') === saisiesOptions[i] ? ' selected' : '') + '>' + (saisiesOptions[i] || t('select')) + '</option>';
   }
   html += '</select></div>';
-  html += '<div class="form-group"><label>Date intégration GIMA</label><input type="text" id="f-Date_Integration_GIMA" value="' + v('Date_Integration_GIMA') + '" placeholder="jj/mm/aaaa" /></div>';
+  html += '<div class="form-group"><label>Date intégration GIMA</label><input type="date" id="f-Date_Integration_GIMA" value="' + v('Date_Integration_GIMA') + '" /></div>';
   html += '<div class="form-group"><label>Dossier numérique sous L</label><input type="text" id="f-Dossier_Numerique" value="' + v('Dossier_Numerique') + '" /></div>';
   html += '</div></div>';
 
