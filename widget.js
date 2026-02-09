@@ -587,14 +587,56 @@ function renderClassicSearch() {
   return html;
 }
 
+function updateRapportPreview() {
+  var el = document.getElementById('rapport-preview-count');
+  if (!el) return;
+  var dateDebutEl = document.getElementById('rapport-date-debut');
+  var dateFinEl = document.getElementById('rapport-date-fin');
+  if (!dateDebutEl || !dateFinEl || !dateDebutEl.value || !dateFinEl.value) {
+    el.innerHTML = '';
+    return;
+  }
+  var dateDebut = new Date(dateDebutEl.value + 'T00:00:00');
+  var dateFin = new Date(dateFinEl.value + 'T23:59:59');
+  if (isNaN(dateDebut.getTime()) || isNaN(dateFin.getTime())) { el.innerHTML = ''; return; }
+  var count = biens.filter(function(b) {
+    var d = parseDateFR(b.Date_Acte);
+    if (!d) return false;
+    return d >= dateDebut && d <= dateFin;
+  }).length;
+  if (count > 0) {
+    el.innerHTML = '<span style="color:#22c55e;font-weight:800;">✓ ' + count + ' bien(s) trouvé(s) pour cette période</span>';
+  } else {
+    el.innerHTML = '<span style="color:#ef4444;font-weight:800;">✗ Aucun bien trouvé pour cette période</span>';
+  }
+}
+
 function renderRapportView() {
+  // Compute actual date range from data
+  var minD = null, maxD = null;
+  for (var i = 0; i < biens.length; i++) {
+    var d = parseDateFR(biens[i].Date_Acte);
+    if (d) {
+      if (!minD || d < minD) minD = d;
+      if (!maxD || d > maxD) maxD = d;
+    }
+  }
+  var rangeInfo = minD && maxD ? formatDateFR(minD) + ' → ' + formatDateFR(maxD) : 'N/A';
+
   var html = '<div class="rapport-form">';
   html += '<h4 style="font-size:15px;font-weight:800;margin-bottom:16px;">Export PDF - Mouvements Patrimoine</h4>';
 
-  html += '<div class="rapport-dates">';
-  html += '<div><label>📅 Date de début</label><input type="date" id="rapport-date-debut" /></div>';
-  html += '<div><label>📅 Date de fin</label><input type="date" id="rapport-date-fin" /></div>';
+  // Show actual data range
+  html += '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;">';
+  html += '<strong>📊 Plage des données :</strong> ' + rangeInfo + ' (' + biens.length + ' biens)';
   html += '</div>';
+
+  html += '<div class="rapport-dates">';
+  html += '<div><label>📅 Date de début</label><input type="date" id="rapport-date-debut" onchange="updateRapportPreview()" /></div>';
+  html += '<div><label>📅 Date de fin</label><input type="date" id="rapport-date-fin" onchange="updateRapportPreview()" /></div>';
+  html += '</div>';
+
+  html += '<div id="rapport-preview-count" style="text-align:center;margin-bottom:12px;font-size:13px;"></div>';
 
   html += '<button class="rapport-btn" onclick="generateRapportPDF()">📄 Générer le PDF (A2 Paysage)</button>';
 
@@ -667,25 +709,12 @@ function generateRapportPDF() {
     return;
   }
 
-  // Debug: log date range and min/max serial values
-  var allSerials = biens.map(function(b) { return parseInt(b.Date_Acte) || 0; }).filter(function(n) { return n > 0; });
-  var minSerial = Math.min.apply(null, allSerials);
-  var maxSerial = Math.max.apply(null, allSerials);
-  var epochExcel = new Date(1899, 11, 30);
-  var minDate = new Date(epochExcel.getTime() + minSerial * 86400000);
-  var maxDate = new Date(epochExcel.getTime() + maxSerial * 86400000);
-  console.log('Date_Acte range: serial ' + minSerial + '-' + maxSerial + ' → ' + minDate.toISOString().split('T')[0] + ' to ' + maxDate.toISOString().split('T')[0]);
-  console.log('Looking for: ' + dateDebut.toISOString().split('T')[0] + ' to ' + dateFin.toISOString().split('T')[0]);
-  console.log('Dec 2025 would need serial ~' + Math.floor((new Date(2025,11,1).getTime() - epochExcel.getTime()) / 86400000));
-
   // Filter biens by date range
   var filtered = biens.filter(function(b) {
     var d = parseDateFR(b.Date_Acte);
     if (!d) return false;
     return d >= dateDebut && d <= dateFin;
   });
-
-  console.log('Filtered biens count:', filtered.length, '/ total:', biens.length);
 
   if (filtered.length === 0) {
     showToast('Aucun bien trouvé pour cette période', 'error');
