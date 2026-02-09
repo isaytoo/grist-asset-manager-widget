@@ -650,12 +650,19 @@ function generateRapportPDF() {
     return;
   }
 
+  // Debug: log first 5 Date_Acte values to understand format
+  var sampleDates = biens.slice(0, 5).map(function(b) { return { raw: b.Date_Acte, type: typeof b.Date_Acte }; });
+  console.log('Date_Acte samples:', JSON.stringify(sampleDates));
+  console.log('Date range:', dateDebut.toISOString(), 'to', dateFin.toISOString());
+
   // Filter biens by date range
   var filtered = biens.filter(function(b) {
     var d = parseDateFR(b.Date_Acte);
     if (!d) return false;
     return d >= dateDebut && d <= dateFin;
   });
+
+  console.log('Filtered biens count:', filtered.length, '/ total:', biens.length);
 
   if (filtered.length === 0) {
     showToast('Aucun bien trouvé pour cette période', 'error');
