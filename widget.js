@@ -2897,6 +2897,12 @@ async function saveBien(bienId) {
   var record = getFormData();
   if (!record.Reference_DDC) { showToast('Référence DDC requise', 'error'); return; }
 
+  // Check uniqueness of Reference_DDC
+  var duplicate = biens.find(function(x) {
+    return String(x.Reference_DDC || '').trim().toLowerCase() === String(record.Reference_DDC).trim().toLowerCase() && x.id !== bienId;
+  });
+  if (duplicate) { showToast('La Référence DDC "' + record.Reference_DDC + '" existe déjà !', 'error'); return; }
+
   try {
     if (bienId) {
       // Update
