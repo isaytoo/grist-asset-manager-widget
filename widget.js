@@ -1759,15 +1759,19 @@ function buildPieChart(slices, size) {
       svg += '<path d="M ' + cx + ' ' + cy + ' L ' + x1 + ' ' + y1 + ' A ' + (r - 4) + ' ' + (r - 4) + ' 0 ' + largeArc + ' 1 ' + x2 + ' ' + y2 + ' Z" fill="' + slices[i].color + '" />';
     }
 
-    // Label in the middle of the slice with dynamic text color
+    // Label in the middle of the slice with background for readability
     var midAngle = startAngle + angle / 2;
-    var labelR = (r - 4) * 0.6;
+    var labelR = (r - 4) * 0.55;
     var lx = cx + labelR * Math.cos(midAngle);
     var ly = cy + labelR * Math.sin(midAngle);
     var labelVal = Math.round(Math.abs(slices[i].value)).toLocaleString() + ' m²';
-    var txtColor = contrastTextColor(slices[i].color);
+    var fontSize = size > 180 ? 13 : 11;
     if (pct > 0.05) {
-      svg += '<text x="' + lx + '" y="' + ly + '" text-anchor="middle" dominant-baseline="central" fill="' + txtColor + '" font-size="' + (size > 180 ? 12 : 10) + '" font-weight="800" stroke="' + (txtColor === '#fff' ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.5)') + '" stroke-width="0.5">' + labelVal + '</text>';
+      // Background pill for contrast
+      var textW = labelVal.length * fontSize * 0.55;
+      var textH = fontSize + 6;
+      svg += '<rect x="' + (lx - textW/2 - 4) + '" y="' + (ly - textH/2) + '" width="' + (textW + 8) + '" height="' + textH + '" rx="4" fill="rgba(255,255,255,0.85)" />';
+      svg += '<text x="' + lx + '" y="' + ly + '" text-anchor="middle" dominant-baseline="central" fill="#1e293b" font-size="' + fontSize + '" font-weight="800">' + labelVal + '</text>';
     }
 
     startAngle = endAngle;
