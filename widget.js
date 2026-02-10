@@ -1741,7 +1741,9 @@ function buildPieChart(slices, size) {
   var cx = r, cy = r;
   var svg = '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">';
 
+  // Pass 1: draw all segments first
   var startAngle = -Math.PI / 2;
+  var labelData = [];
   for (var i = 0; i < slices.length; i++) {
     var pct = Math.abs(slices[i].value) / total;
     var angle = pct * 2 * Math.PI;
@@ -1759,22 +1761,24 @@ function buildPieChart(slices, size) {
       svg += '<path d="M ' + cx + ' ' + cy + ' L ' + x1 + ' ' + y1 + ' A ' + (r - 4) + ' ' + (r - 4) + ' 0 ' + largeArc + ' 1 ' + x2 + ' ' + y2 + ' Z" fill="' + slices[i].color + '" />';
     }
 
-    // Label in the middle of the slice with background for readability
+    // Store label position for pass 2
     var midAngle = startAngle + angle / 2;
-    var labelR = (r - 4) * 0.55;
-    var lx = cx + labelR * Math.cos(midAngle);
-    var ly = cy + labelR * Math.sin(midAngle);
-    var labelVal = Math.round(Math.abs(slices[i].value)).toLocaleString() + ' m²';
-    var fontSize = size > 180 ? 13 : 11;
-    if (pct > 0.05) {
-      // Background pill for contrast
-      var textW = labelVal.length * fontSize * 0.55;
-      var textH = fontSize + 6;
-      svg += '<rect x="' + (lx - textW/2 - 4) + '" y="' + (ly - textH/2) + '" width="' + (textW + 8) + '" height="' + textH + '" rx="4" fill="rgba(255,255,255,0.85)" />';
-      svg += '<text x="' + lx + '" y="' + ly + '" text-anchor="middle" dominant-baseline="central" fill="#1e293b" font-size="' + fontSize + '" font-weight="800">' + labelVal + '</text>';
-    }
-
+    labelData.push({ pct: pct, midAngle: midAngle, value: slices[i].value });
     startAngle = endAngle;
+  }
+
+  // Pass 2: draw all labels on top of all segments
+  var fontSize = size > 180 ? 13 : 11;
+  for (var j = 0; j < labelData.length; j++) {
+    if (labelData[j].pct <= 0.05) continue;
+    var labelR = (r - 4) * 0.55;
+    var lx = cx + labelR * Math.cos(labelData[j].midAngle);
+    var ly = cy + labelR * Math.sin(labelData[j].midAngle);
+    var labelVal = Math.round(Math.abs(labelData[j].value)).toLocaleString() + ' m²';
+    var textW = labelVal.length * fontSize * 0.6;
+    var textH = fontSize + 8;
+    svg += '<rect x="' + (lx - textW/2 - 6) + '" y="' + (ly - textH/2) + '" width="' + (textW + 12) + '" height="' + textH + '" rx="4" fill="rgba(255,255,255,0.9)" />';
+    svg += '<text x="' + lx + '" y="' + ly + '" text-anchor="middle" dominant-baseline="central" fill="#1e293b" font-size="' + fontSize + '" font-weight="800">' + labelVal + '</text>';
   }
   svg += '</svg>';
 
