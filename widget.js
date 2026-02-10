@@ -582,6 +582,7 @@ function renderClassicSearch() {
 
   html += '<div class="search-actions">';
   html += '<button class="btn btn-secondary" onclick="resetSearch()">🔄 ' + t('resetBtn') + '</button>';
+  html += '<button class="btn btn-danger" onclick="exportSearchExcel()" style="margin-left:8px;">📊 ' + t('exportBtn') + '</button>';
   html += '</div>';
 
   return html;
@@ -1016,6 +1017,48 @@ function resetSearch() {
   sortCol = '';
   sortDir = 'asc';
   doSearch();
+}
+
+function exportSearchExcel() {
+  if (searchResults.length === 0) {
+    showToast('Aucun résultat à exporter', 'error');
+    return;
+  }
+
+  // Build header row from BIEN_COLUMNS labels
+  var headers = [];
+  var fields = [];
+  for (var c = 0; c < BIEN_COLUMNS.length; c++) {
+    headers.push(currentLang === 'fr' ? BIEN_COLUMNS[c].label_fr : BIEN_COLUMNS[c].label_en);
+    fields.push(BIEN_COLUMNS[c].id);
+  }
+
+  // Build data rows from ALL search results (not just current page)
+  var rows = [headers];
+  for (var i = 0; i < searchResults.length; i++) {
+    var row = [];
+    for (var f = 0; f < fields.length; f++) {
+      var val = searchResults[i][fields[f]];
+      // Format dates
+      if (fields[f] === 'Date_Acte' || fields[f] === 'Date_Integration_GIMA') {
+        var d = parseDateFR(val);
+        val = d ? formatDateFR(d) : (val || '');
+      } else {
+        val = val != null ? String(val) : '';
+      }
+      row.push(val);
+    }
+    rows.push(row);
+  }
+
+  // Create workbook and download
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  // Auto-size columns
+  ws['!cols'] = headers.map(function(h) { return { wch: Math.max(h.length + 2, 14) }; });
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Résultats');
+  XLSX.writeFile(wb, 'recherche_biens_' + searchResults.length + '_resultats.xlsx');
+  showToast('Export Excel téléchargé (' + searchResults.length + ' biens)', 'success');
 }
 
 function sortBy(col) {
