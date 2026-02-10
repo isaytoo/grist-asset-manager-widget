@@ -1392,6 +1392,15 @@ function buildFormHtml(bien) {
     return sanitize(bien[field] || '');
   };
 
+  // Build unique sorted commune list from existing data
+  var communeSet = {};
+  for (var ci = 0; ci < biens.length; ci++) {
+    var c = String(biens[ci].Commune || '').trim();
+    if (c) communeSet[c.toUpperCase()] = c;
+  }
+  var communeOptions = [''];
+  Object.keys(communeSet).sort().forEach(function(k) { communeOptions.push(communeSet[k]); });
+
   var mouvementOptions = ['', 'Acquisition', 'Cession', 'Préemption', 'Servitude', 'Échange', 'Expropriation', 'Libération', 'Annulation EEDV-RCP'];
   var typeOptions = ['', 'Bâti sans terrain', 'Non bâti', 'Bâti', 'Terrain'];
   var ouiNonOptions = ['', 'Oui', 'Non'];
@@ -1425,7 +1434,14 @@ function buildFormHtml(bien) {
   // Section: Localisation
   html += '<div class="form-section"><h4>📍 ' + t('sectionLocalisation') + '</h4>';
   html += '<div class="form-grid">';
-  html += '<div class="form-group"><label>Commune <span class="required">*</span></label><input type="text" id="f-Commune" value="' + v('Commune') + '" /></div>';
+  var communeSelect = '<select id="f-Commune">';
+  for (var csi = 0; csi < communeOptions.length; csi++) {
+    var cOpt = communeOptions[csi];
+    var cSel = (v('Commune') === cOpt) ? ' selected' : '';
+    communeSelect += '<option value="' + sanitize(cOpt) + '"' + cSel + '>' + (cOpt || 'Sélectionner') + '</option>';
+  }
+  communeSelect += '</select>';
+  html += '<div class="form-group"><label>Commune <span class="required">*</span></label>' + communeSelect + '</div>';
   html += '<div class="form-group"><label>Adresse</label><input type="text" id="f-Adresse" value="' + v('Adresse') + '" /></div>';
   html += '<div class="form-group"><label>Référence Parcelles</label><input type="text" id="f-Ref_Parcelles" value="' + v('Ref_Parcelles') + '" /></div>';
   html += '</div></div>';
