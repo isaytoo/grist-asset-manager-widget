@@ -1392,37 +1392,40 @@ function buildFormHtml(bien) {
     return sanitize(bien[field] || '');
   };
 
-  // Helper: merge reference values + unique values from DB, sorted, deduplicated
-  function mergedOptions(field, refValues) {
+  // Helper: extract unique sorted values from DB for a field (for dynamic fields like Commune)
+  function uniqueFromDB(field) {
     var set = {};
-    // Add reference values first
-    for (var r = 0; r < refValues.length; r++) {
-      var rv = refValues[r].trim();
-      if (rv) set[rv.toUpperCase()] = rv;
-    }
-    // Add values from existing data (keeps DB values not in reference list)
     for (var i = 0; i < biens.length; i++) {
       var val = String(biens[i][field] || '').trim();
-      if (val && !set[val.toUpperCase()]) set[val.toUpperCase()] = val;
+      if (val) set[val.toUpperCase()] = val;
     }
     var arr = [''];
     Object.keys(set).sort().forEach(function(k) { arr.push(set[k]); });
     return arr;
   }
 
-  // Reference values aligned with patrimoine-moderne
-  var communeOptions = mergedOptions('Commune', []);
-  var mouvementOptions = mergedOptions('Mouvement', ['Acquisition', 'Cession', 'Échange', 'Expropriation', 'Libération', 'Préemption', 'Servitude']);
-  var typeOptions = mergedOptions('Type_Bien', ['Bâti', 'Bâti sans terrain', 'Non bâti', 'Terrain']);
-  var occupationOptions = mergedOptions('Occupation', ['Libre', 'Occupée', 'Partiellement occupée']);
-  var jouissanceAnticipeeOptions = mergedOptions('Jouissance_Anticipee', ['Oui', 'Non']);
-  var jouissanceDiffereeOptions = mergedOptions('Jouissance_Differee', ['Oui', 'Non']);
-  var nouvelleCoproOptions = mergedOptions('Nouvelle_Copropriete', ['Oui', 'Non']);
-  var bailOptions = mergedOptions('Bail_Longue_Duree', ['Oui', 'Non']);
-  var acqCompteOptions = mergedOptions('Acquisition_Compte_Tiers', ['Oui', 'Non']);
-  var prefinancementOptions = mergedOptions('Prefinancement', ['Oui', 'Non']);
-  var importGimaOptions = mergedOptions('Import_GIMA', ['Import automatique', 'Absent de l\'import', 'Exempté']);
-  var saisiesOptions = mergedOptions('Saisies_Manuelles', ['Oui', 'Non', 'Création manuelle']);
+  // Helper: fixed reference list only (normalized, no DB merge)
+  function fixedOptions(values) {
+    var arr = [''];
+    for (var i = 0; i < values.length; i++) arr.push(values[i]);
+    return arr;
+  }
+
+  // Dynamic from DB
+  var communeOptions = uniqueFromDB('Commune');
+
+  // Fixed reference lists (normalized, aligned with patrimoine-moderne)
+  var mouvementOptions = fixedOptions(['Acquisition', 'Cession', 'Échange', 'Expropriation', 'Libération', 'Préemption', 'Servitude']);
+  var typeOptions = fixedOptions(['Bâti avec terrain', 'Bâti sans terrain', 'Terrain nu']);
+  var occupationOptions = fixedOptions(['Libre', 'Occupée', 'Partiellement occupée']);
+  var jouissanceAnticipeeOptions = fixedOptions(['Oui', 'Non']);
+  var jouissanceDiffereeOptions = fixedOptions(['Oui', 'Non']);
+  var nouvelleCoproOptions = fixedOptions(['Oui', 'Non']);
+  var bailOptions = fixedOptions(['Oui', 'Non']);
+  var acqCompteOptions = fixedOptions(['Oui', 'Non']);
+  var prefinancementOptions = fixedOptions(['Oui', 'Non']);
+  var importGimaOptions = fixedOptions(['Import automatique', 'Absent de l\'import', 'Exempté']);
+  var saisiesOptions = fixedOptions(['Oui', 'Non', 'Création manuelle']);
 
   var html = '';
 
