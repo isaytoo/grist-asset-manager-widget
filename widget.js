@@ -1057,7 +1057,7 @@ function renderSearchResults() {
       html += '<tr onclick="openDetailModal(' + b.id + ')">';
       html += '<td>' + sanitize(b.Reference_DDC) + '</td>';
       html += '<td>' + movementBadge(b.Mouvement) + '</td>';
-      html += '<td>' + sanitize(b.Date_Acte) + '</td>';
+      html += '<td>' + sanitize(formatDateFR(parseDateFR(b.Date_Acte)) || b.Date_Acte) + '</td>';
       html += '<td>' + sanitize(b.Commune) + '</td>';
       html += '<td>' + sanitize(b.Adresse) + '</td>';
       html += '<td>' + sanitize(b.Type_Bien) + '</td>';
