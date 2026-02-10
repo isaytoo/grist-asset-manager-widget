@@ -1411,6 +1411,13 @@ function buildFormHtml(bien) {
     return arr;
   }
 
+  // Case-insensitive match helper for select comparisons
+  function selMatch(fieldVal, optVal) {
+    if (!fieldVal && !optVal) return true;
+    if (!fieldVal || !optVal) return false;
+    return String(fieldVal).trim().toUpperCase() === String(optVal).trim().toUpperCase();
+  }
+
   // Dynamic from DB
   var communeOptions = uniqueFromDB('Commune');
 
@@ -1444,7 +1451,7 @@ function buildFormHtml(bien) {
   html += '<div class="form-grid">';
   html += '<div class="form-group"><label>Type de Mouvement <span class="required">*</span></label><select id="f-Mouvement">';
   for (var i = 0; i < mouvementOptions.length; i++) {
-    html += '<option value="' + mouvementOptions[i] + '"' + (v('Mouvement') === mouvementOptions[i] ? ' selected' : '') + '>' + (mouvementOptions[i] || t('select')) + '</option>';
+    html += '<option value="' + mouvementOptions[i] + '"' + (selMatch(v('Mouvement'), mouvementOptions[i]) ? ' selected' : '') + '>' + (mouvementOptions[i] || t('select')) + '</option>';
   }
   html += '</select></div>';
   html += '<div class="form-group"><label>Date de l\'acte</label><input type="date" id="f-Date_Acte" value="' + v('Date_Acte') + '" /></div>';
@@ -1457,7 +1464,7 @@ function buildFormHtml(bien) {
   var communeSelect = '<select id="f-Commune">';
   for (var csi = 0; csi < communeOptions.length; csi++) {
     var cOpt = communeOptions[csi];
-    var cSel = (v('Commune') === cOpt) ? ' selected' : '';
+    var cSel = selMatch(v('Commune'), cOpt) ? ' selected' : '';
     communeSelect += '<option value="' + sanitize(cOpt) + '"' + cSel + '>' + (cOpt || 'Sélectionner') + '</option>';
   }
   communeSelect += '</select>';
@@ -1471,7 +1478,7 @@ function buildFormHtml(bien) {
   html += '<div class="form-grid">';
   html += '<div class="form-group"><label>Type de Bien</label><select id="f-Type_Bien">';
   for (var i = 0; i < typeOptions.length; i++) {
-    html += '<option value="' + typeOptions[i] + '"' + (v('Type_Bien') === typeOptions[i] ? ' selected' : '') + '>' + (typeOptions[i] || t('select')) + '</option>';
+    html += '<option value="' + typeOptions[i] + '"' + (selMatch(v('Type_Bien'), typeOptions[i]) ? ' selected' : '') + '>' + (typeOptions[i] || t('select')) + '</option>';
   }
   html += '</select></div>';
   html += '<div class="form-group"><label>Surface bâti (m²)</label><input type="text" id="f-Surface_Bati" value="' + v('Surface_Bati') + '" /></div>';
@@ -1479,7 +1486,7 @@ function buildFormHtml(bien) {
   html += '<div class="form-group"><label>Surface assurance (m²)</label><input type="text" id="f-Surface_Assurance" value="' + v('Surface_Assurance') + '" /></div>';
   html += '<div class="form-group"><label>Nouvelle copropriété</label><select id="f-Nouvelle_Copropriete">';
   for (var i = 0; i < nouvelleCoproOptions.length; i++) {
-    html += '<option value="' + nouvelleCoproOptions[i] + '"' + (v('Nouvelle_Copropriete') === nouvelleCoproOptions[i] ? ' selected' : '') + '>' + (nouvelleCoproOptions[i] || t('select')) + '</option>';
+    html += '<option value="' + nouvelleCoproOptions[i] + '"' + (selMatch(v('Nouvelle_Copropriete'), nouvelleCoproOptions[i]) ? ' selected' : '') + '>' + (nouvelleCoproOptions[i] || t('select')) + '</option>';
   }
   html += '</select></div>';
   html += '</div></div>';
@@ -1489,23 +1496,23 @@ function buildFormHtml(bien) {
   html += '<div class="form-grid">';
   html += '<div class="form-group"><label>Occupation</label><select id="f-Occupation">';
   for (var i = 0; i < occupationOptions.length; i++) {
-    html += '<option value="' + occupationOptions[i] + '"' + (v('Occupation') === occupationOptions[i] ? ' selected' : '') + '>' + (occupationOptions[i] || t('select')) + '</option>';
+    html += '<option value="' + occupationOptions[i] + '"' + (selMatch(v('Occupation'), occupationOptions[i]) ? ' selected' : '') + '>' + (occupationOptions[i] || t('select')) + '</option>';
   }
   html += '</select></div>';
   html += '<div class="form-group"><label>Jouissance anticipée</label><select id="f-Jouissance_Anticipee">';
   for (var i = 0; i < jouissanceAnticipeeOptions.length; i++) {
-    html += '<option value="' + jouissanceAnticipeeOptions[i] + '"' + (v('Jouissance_Anticipee') === jouissanceAnticipeeOptions[i] ? ' selected' : '') + '>' + (jouissanceAnticipeeOptions[i] || t('select')) + '</option>';
+    html += '<option value="' + jouissanceAnticipeeOptions[i] + '"' + (selMatch(v('Jouissance_Anticipee'), jouissanceAnticipeeOptions[i]) ? ' selected' : '') + '>' + (jouissanceAnticipeeOptions[i] || t('select')) + '</option>';
   }
   html += '</select></div>';
   html += '<div class="form-group"><label>Jouissance différée</label><select id="f-Jouissance_Differee">';
   for (var i = 0; i < jouissanceDiffereeOptions.length; i++) {
-    html += '<option value="' + jouissanceDiffereeOptions[i] + '"' + (v('Jouissance_Differee') === jouissanceDiffereeOptions[i] ? ' selected' : '') + '>' + (jouissanceDiffereeOptions[i] || t('select')) + '</option>';
+    html += '<option value="' + jouissanceDiffereeOptions[i] + '"' + (selMatch(v('Jouissance_Differee'), jouissanceDiffereeOptions[i]) ? ' selected' : '') + '>' + (jouissanceDiffereeOptions[i] || t('select')) + '</option>';
   }
   html += '</select></div>';
   html += '<div class="form-group"><label>Temps portage - Année fin</label><input type="text" id="f-Temps_Portage" value="' + v('Temps_Portage') + '" /></div>';
   html += '<div class="form-group"><label>Mis à bail longue durée</label><select id="f-Bail_Longue_Duree">';
   for (var i = 0; i < bailOptions.length; i++) {
-    html += '<option value="' + bailOptions[i] + '"' + (v('Bail_Longue_Duree') === bailOptions[i] ? ' selected' : '') + '>' + (bailOptions[i] || t('select')) + '</option>';
+    html += '<option value="' + bailOptions[i] + '"' + (selMatch(v('Bail_Longue_Duree'), bailOptions[i]) ? ' selected' : '') + '>' + (bailOptions[i] || t('select')) + '</option>';
   }
   html += '</select></div>';
   html += '</div></div>';
@@ -1515,12 +1522,12 @@ function buildFormHtml(bien) {
   html += '<div class="form-grid">';
   html += '<div class="form-group"><label>Acquisition compte tiers</label><select id="f-Acquisition_Compte_Tiers">';
   for (var i = 0; i < acqCompteOptions.length; i++) {
-    html += '<option value="' + acqCompteOptions[i] + '"' + (v('Acquisition_Compte_Tiers') === acqCompteOptions[i] ? ' selected' : '') + '>' + (acqCompteOptions[i] || t('select')) + '</option>';
+    html += '<option value="' + acqCompteOptions[i] + '"' + (selMatch(v('Acquisition_Compte_Tiers'), acqCompteOptions[i]) ? ' selected' : '') + '>' + (acqCompteOptions[i] || t('select')) + '</option>';
   }
   html += '</select></div>';
   html += '<div class="form-group"><label>Préfinancement</label><select id="f-Prefinancement">';
   for (var i = 0; i < prefinancementOptions.length; i++) {
-    html += '<option value="' + prefinancementOptions[i] + '"' + (v('Prefinancement') === prefinancementOptions[i] ? ' selected' : '') + '>' + (prefinancementOptions[i] || t('select')) + '</option>';
+    html += '<option value="' + prefinancementOptions[i] + '"' + (selMatch(v('Prefinancement'), prefinancementOptions[i]) ? ' selected' : '') + '>' + (prefinancementOptions[i] || t('select')) + '</option>';
   }
   html += '</select></div>';
   html += '<div class="form-group"><label>Tiers Vendeur ou Acquéreur</label><input type="text" id="f-Tiers_Vendeur_Acquereur" value="' + v('Tiers_Vendeur_Acquereur') + '" /></div>';
@@ -1531,13 +1538,13 @@ function buildFormHtml(bien) {
   html += '<div class="form-grid">';
   html += '<div class="form-group"><label>Import GIMA</label><select id="f-Import_GIMA">';
   for (var i = 0; i < importGimaOptions.length; i++) {
-    html += '<option value="' + importGimaOptions[i] + '"' + (v('Import_GIMA') === importGimaOptions[i] ? ' selected' : '') + '>' + (importGimaOptions[i] || t('select')) + '</option>';
+    html += '<option value="' + importGimaOptions[i] + '"' + (selMatch(v('Import_GIMA'), importGimaOptions[i]) ? ' selected' : '') + '>' + (importGimaOptions[i] || t('select')) + '</option>';
   }
   html += '</select></div>';
   html += '<div class="form-group"><label>N° du site</label><input type="text" id="f-Num_Site" value="' + v('Num_Site') + '" /></div>';
   html += '<div class="form-group"><label>Saisies manuelles</label><select id="f-Saisies_Manuelles">';
   for (var i = 0; i < saisiesOptions.length; i++) {
-    html += '<option value="' + saisiesOptions[i] + '"' + (v('Saisies_Manuelles') === saisiesOptions[i] ? ' selected' : '') + '>' + (saisiesOptions[i] || t('select')) + '</option>';
+    html += '<option value="' + saisiesOptions[i] + '"' + (selMatch(v('Saisies_Manuelles'), saisiesOptions[i]) ? ' selected' : '') + '>' + (saisiesOptions[i] || t('select')) + '</option>';
   }
   html += '</select></div>';
   html += '<div class="form-group"><label>Date intégration GIMA</label><input type="date" id="f-Date_Integration_GIMA" value="' + v('Date_Integration_GIMA') + '" /></div>';
