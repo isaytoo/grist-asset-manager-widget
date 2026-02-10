@@ -142,11 +142,17 @@
     .form-group .radio-group label { font-size: 13px; color: #1e293b; display: flex; align-items: center; gap: 4px; cursor: pointer; }
 
     /* ========== DETAIL MODAL ========== */
-    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .detail-item { padding: 8px 12px; background: #f8fafc; border-radius: 8px; }
-    .detail-item .detail-label { font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; }
-    .detail-item .detail-value { font-size: 13px; font-weight: 600; color: #1e293b; margin-top: 2px; word-break: break-word; }
-    .detail-item.full-width { grid-column: 1 / -1; }
+    .detail-section { margin-bottom: 28px; }
+    .detail-section-title { font-size: 16px; font-weight: 800; color: #dc2626; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+    .detail-section-line { height: 2px; background: linear-gradient(90deg, #ef4444, transparent); margin-bottom: 16px; }
+    .detail-grid-1, .detail-grid-2, .detail-grid-3, .detail-grid-4 { display: grid; gap: 12px; margin-bottom: 12px; }
+    .detail-grid-1 { grid-template-columns: 1fr; }
+    .detail-grid-2 { grid-template-columns: 1fr 1fr; }
+    .detail-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .detail-grid-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+    .detail-card-item { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; background: #f8fafc; }
+    .detail-card-label { font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px; }
+    .detail-card-value { font-size: 14px; font-weight: 600; color: #1e293b; word-break: break-word; }
 
     /* ========== DASHBOARD ========== */
     .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
@@ -285,7 +291,7 @@
       .tab-content { padding: 16px; }
       .search-grid { grid-template-columns: 1fr 1fr; }
       .form-grid { grid-template-columns: 1fr; }
-      .detail-grid { grid-template-columns: 1fr; }
+      .detail-grid-2, .detail-grid-3, .detail-grid-4 { grid-template-columns: 1fr; }
       .gestion-cards { grid-template-columns: 1fr; }
       .top-grid { grid-template-columns: repeat(3, 1fr); }
       .modal { max-width: 100%; margin: 10px; }

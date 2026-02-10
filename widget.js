@@ -1054,7 +1054,7 @@ function renderSearchResults() {
 
     for (var i = 0; i < pageItems.length; i++) {
       var b = pageItems[i];
-      html += '<tr onclick="openDetailModal(' + b.id + ')">';
+      html += '<tr onclick="openDetailModal(' + b.id + ',false)">';
       html += '<td>' + sanitize(b.Reference_DDC) + '</td>';
       html += '<td>' + movementBadge(b.Mouvement) + '</td>';
       html += '<td>' + sanitize(formatDateFR(parseDateFR(b.Date_Acte)) || b.Date_Acte) + '</td>';
@@ -1089,33 +1089,137 @@ function renderSearchResults() {
 // DETAIL MODAL (read-only)
 // =============================================================================
 
-function openDetailModal(bienId) {
+function openDetailModal(bienId, showManageButtons) {
   var b = biens.find(function(x) { return x.id === bienId; });
   if (!b) return;
 
-  var html = '<div class="modal-overlay" onclick="closeModal(event)">';
-  html += '<div class="modal" onclick="event.stopPropagation()">';
-  html += '<div class="modal-header-red"><h3>📋 ' + t('modalDetail') + '</h3><button class="modal-close-white" onclick="closeModalForce()">✕</button></div>';
-  html += '<div class="modal-body">';
-
-  html += '<div class="detail-grid">';
-  for (var i = 0; i < BIEN_COLUMNS.length; i++) {
-    var col = BIEN_COLUMNS[i];
-    var val = b[col.id];
-    var displayVal = val ? sanitize(String(val)) : '--';
-    if (col.id === 'Mouvement') displayVal = movementBadge(val);
-    if (col.id === 'Date_Acte' || col.id === 'Date_Integration_GIMA') { var fd = formatDateFR(parseDateFR(val)); if (fd) displayVal = sanitize(fd); }
-    var fullClass = (col.id === 'Nature_Bien' || col.id === 'Observation') ? ' full-width' : '';
-    html += '<div class="detail-item' + fullClass + '">';
-    html += '<div class="detail-label">' + colLabel(col) + '</div>';
-    html += '<div class="detail-value">' + displayVal + '</div>';
-    html += '</div>';
+  function dv(field) {
+    var val = b[field];
+    if (field === 'Date_Acte' || field === 'Date_Integration_GIMA') { var fd = formatDateFR(parseDateFR(val)); if (fd) return sanitize(fd); }
+    if (field === 'Mouvement') return movementBadge(val);
+    if (field === 'Surface_Bati' || field === 'Surface_Parcelle' || field === 'Surface_Assurance') { return val ? sanitize(String(val)) + ' m²' : '--'; }
+    return val ? sanitize(String(val)) : 'Non spécifié';
   }
+
+  var html = '<div class="modal-overlay" onclick="closeModal(event)">';
+  html += '<div class="modal" style="max-width:960px;" onclick="event.stopPropagation()">';
+
+  // Header dark with print button
+  html += '<div class="modal-header-dark" style="background:#1e293b;color:#fff;padding:18px 24px;display:flex;align-items:center;justify-content:space-between;border-radius:16px 16px 0 0;">';
+  html += '<h3 style="font-size:18px;font-weight:800;margin:0;">📋 Détails du Bien:</h3>';
+  html += '<div style="display:flex;align-items:center;gap:8px;">';
+  html += '<button class="btn" onclick="printDetailModal()" style="background:#fff;color:#1e293b;border:none;padding:8px 16px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;">🖨️ Imprimer</button>';
+  html += '<button style="background:none;border:none;color:#fff;font-size:22px;font-weight:700;cursor:pointer;padding:4px 8px;border-radius:6px;" onclick="closeModalForce()">✕</button>';
+  html += '</div></div>';
+
+  html += '<div class="modal-body" id="detail-modal-content" style="padding:32px;max-height:75vh;overflow-y:auto;">';
+
+  // Section: Identification
+  html += '<div class="detail-section">';
+  html += '<h4 class="detail-section-title"><span>📁</span> Identification</h4>';
+  html += '<div class="detail-section-line"></div>';
+  html += '<div class="detail-grid-3">';
+  html += detailCard('Référence DDC', dv('Reference_DDC'));
+  html += detailCard('ID Unique', sanitize(String(b.id || '')));
+  html += detailCard('Gestion SPI', (String(b.Gestion_SPI || '').toUpperCase() === 'OUI' ? 'OUI' : 'NON'));
+  html += '</div>';
+  html += '<div class="detail-grid-1">';
+  html += detailCard('Nom de l\'OFA / OFT', dv('Nom_OFA_OFT'));
+  html += '</div>';
+  html += '</div>';
+
+  // Section: Mouvement
+  html += '<div class="detail-section">';
+  html += '<h4 class="detail-section-title"><span>🔄</span> Mouvement</h4>';
+  html += '<div class="detail-section-line"></div>';
+  html += '<div class="detail-grid-3">';
+  html += detailCard('Type de Mouvement', dv('Mouvement'));
+  html += detailCard('Date de l\'Acte', dv('Date_Acte'));
+  html += detailCard('Année', dv('Annee'));
+  html += '</div>';
+  html += '</div>';
+
+  // Section: Localisation
+  html += '<div class="detail-section">';
+  html += '<h4 class="detail-section-title"><span>📍</span> Localisation</h4>';
+  html += '<div class="detail-section-line"></div>';
+  html += '<div class="detail-grid-3">';
+  html += detailCard('Commune', dv('Commune'));
+  html += detailCard('Adresse', dv('Adresse'));
+  html += detailCard('Références Parcelles', dv('Ref_Parcelles'));
+  html += '</div>';
+  html += '</div>';
+
+  // Section: Caractéristiques du Bien
+  html += '<div class="detail-section">';
+  html += '<h4 class="detail-section-title"><span>🏗️</span> Caractéristiques du Bien</h4>';
+  html += '<div class="detail-section-line"></div>';
+  html += '<div class="detail-grid-4">';
+  html += detailCard('Type de Bien', dv('Type_Bien'));
+  html += detailCard('Surface Bâti', dv('Surface_Bati'));
+  html += detailCard('Surface Parcelle', dv('Surface_Parcelle'));
+  html += detailCard('Surface pour Assurance', dv('Surface_Assurance'));
+  html += '</div>';
+  html += '</div>';
+
+  // Section: Occupation et Jouissance
+  html += '<div class="detail-section">';
+  html += '<h4 class="detail-section-title"><span>🏠</span> Occupation et Jouissance</h4>';
+  html += '<div class="detail-section-line"></div>';
+  html += '<div class="detail-grid-3">';
+  html += detailCard('Occupation', dv('Occupation'));
+  html += detailCard('Jouissance Anticipée', dv('Jouissance_Anticipee'));
+  html += detailCard('Jouissance Différée', dv('Jouissance_Differee'));
+  html += '</div>';
+  html += '<div class="detail-grid-3">';
+  html += detailCard('Nouvelle Copropriété', dv('Nouvelle_Copropriete'));
+  html += detailCard('Temps Portage / Année fin', dv('Temps_Portage'));
+  html += detailCard('Bail Longue Durée', dv('Bail_Longue_Duree'));
+  html += '</div>';
+  html += '</div>';
+
+  // Section: Acquisition et Financement
+  html += '<div class="detail-section">';
+  html += '<h4 class="detail-section-title"><span>💰</span> Acquisition et Financement</h4>';
+  html += '<div class="detail-section-line"></div>';
+  html += '<div class="detail-grid-3">';
+  html += detailCard('Acquisition Compte Tiers', dv('Acquisition_Compte_Tiers'));
+  html += detailCard('Préfinancement', dv('Prefinancement'));
+  html += detailCard('Tiers Vendeur ou Acquéreur', dv('Tiers_Vendeur_Acquereur'));
+  html += '</div>';
+  html += '</div>';
+
+  // Section: Gestion GIMA
+  html += '<div class="detail-section">';
+  html += '<h4 class="detail-section-title"><span>💾</span> Gestion GIMA</h4>';
+  html += '<div class="detail-section-line"></div>';
+  html += '<div class="detail-grid-3">';
+  html += detailCard('Import GIMA', dv('Import_GIMA'));
+  html += detailCard('N° du Site GIMA', dv('Num_Site'));
+  html += detailCard('Saisies Manuelles', dv('Saisies_Manuelles'));
+  html += '</div>';
+  html += '<div class="detail-grid-2">';
+  html += detailCard('Date d\'intégration GIMA', dv('Date_Integration_GIMA'));
+  html += detailCard('Dossier Numérique sous L', dv('Dossier_Numerique'));
+  html += '</div>';
+  html += '</div>';
+
+  // Section: Nature du Bien et Observations
+  html += '<div class="detail-section">';
+  html += '<h4 class="detail-section-title"><span>📝</span> Nature du Bien et Observations</h4>';
+  html += '<div class="detail-section-line"></div>';
+  html += '<div class="detail-grid-1">';
+  html += detailCard('Nature du bien - Projet acquisition', dv('Nature_Bien'));
+  html += '</div>';
+  html += '<div class="detail-grid-1" style="margin-top:12px;">';
+  html += detailCard('Observations', dv('Observation'));
+  html += '</div>';
   html += '</div>';
 
   html += '</div>'; // modal-body
 
-  if (canManage) {
+  // Footer: only show edit/delete buttons when opened from Gestion tab
+  if (showManageButtons && canManage) {
     html += '<div class="modal-footer">';
     html += '<button class="btn btn-danger" onclick="deleteBien(' + b.id + ')">🗑️ ' + t('delete') + '</button>';
     html += '<button class="btn btn-primary" onclick="openEditModal(' + b.id + ')">✏️ ' + t('modalEdit') + '</button>';
@@ -1124,6 +1228,39 @@ function openDetailModal(bienId) {
 
   html += '</div></div>';
   document.getElementById('modal-container').innerHTML = html;
+}
+
+function detailCard(label, value) {
+  return '<div class="detail-card-item"><div class="detail-card-label">' + label + '</div><div class="detail-card-value">' + value + '</div></div>';
+}
+
+function printDetailModal() {
+  var content = document.getElementById('detail-modal-content');
+  if (!content) return;
+  var win = window.open('', '_blank', 'width=800,height=1100');
+  win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Fiche du Bien</title>');
+  win.document.write('<style>');
+  win.document.write('* { box-sizing: border-box; margin: 0; padding: 0; }');
+  win.document.write('body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 32px; color: #1e293b; }');
+  win.document.write('@page { size: A4; margin: 20mm; }');
+  win.document.write('.detail-section { margin-bottom: 24px; }');
+  win.document.write('.detail-section-title { font-size: 16px; font-weight: 800; color: #dc2626; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }');
+  win.document.write('.detail-section-line { height: 2px; background: linear-gradient(90deg, #ef4444, transparent); margin-bottom: 16px; }');
+  win.document.write('.detail-grid-1, .detail-grid-2, .detail-grid-3, .detail-grid-4 { display: grid; gap: 12px; margin-bottom: 12px; }');
+  win.document.write('.detail-grid-1 { grid-template-columns: 1fr; }');
+  win.document.write('.detail-grid-2 { grid-template-columns: 1fr 1fr; }');
+  win.document.write('.detail-grid-3 { grid-template-columns: 1fr 1fr 1fr; }');
+  win.document.write('.detail-grid-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }');
+  win.document.write('.detail-card-item { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; background: #f8fafc; }');
+  win.document.write('.detail-card-label { font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px; }');
+  win.document.write('.detail-card-value { font-size: 13px; font-weight: 600; color: #1e293b; word-break: break-word; }');
+  win.document.write('.badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; }');
+  win.document.write('</style></head><body>');
+  win.document.write(content.innerHTML);
+  win.document.write('</body></html>');
+  win.document.close();
+  win.focus();
+  setTimeout(function() { win.print(); }, 300);
 }
 
 // =============================================================================
