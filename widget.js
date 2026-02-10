@@ -452,7 +452,7 @@ function movementBadge(mouvement) {
 // =============================================================================
 
 function updateOwnerTabs() {
-  var ownerOnlyTabs = ['import', 'gestionnaires'];
+  var ownerOnlyTabs = ['dashboard', 'import', 'gestionnaires'];
   ownerOnlyTabs.forEach(function(tab) {
     var btn = document.querySelector('[data-tab="' + tab + '"]');
     if (btn) btn.style.display = isOwner ? '' : 'none';
@@ -463,7 +463,7 @@ function updateOwnerTabs() {
 
 function switchTab(tabId) {
   // Block non-owners from accessing owner-only tabs
-  if ((tabId === 'import' || tabId === 'gestionnaires') && !isOwner) return;
+  if ((tabId === 'dashboard' || tabId === 'import' || tabId === 'gestionnaires') && !isOwner) return;
 
   document.querySelectorAll('.tab-btn').forEach(function(btn) {
     btn.classList.toggle('active', btn.getAttribute('data-tab') === tabId);
