@@ -1392,20 +1392,30 @@ function buildFormHtml(bien) {
     return sanitize(bien[field] || '');
   };
 
-  // Build unique sorted commune list from existing data
-  var communeSet = {};
-  for (var ci = 0; ci < biens.length; ci++) {
-    var c = String(biens[ci].Commune || '').trim();
-    if (c) communeSet[c.toUpperCase()] = c;
+  // Helper: extract unique sorted values from a field across all biens
+  function uniqueValues(field) {
+    var set = {};
+    for (var i = 0; i < biens.length; i++) {
+      var val = String(biens[i][field] || '').trim();
+      if (val) set[val.toUpperCase()] = val;
+    }
+    var arr = [''];
+    Object.keys(set).sort().forEach(function(k) { arr.push(set[k]); });
+    return arr;
   }
-  var communeOptions = [''];
-  Object.keys(communeSet).sort().forEach(function(k) { communeOptions.push(communeSet[k]); });
 
-  var mouvementOptions = ['', 'Acquisition', 'Cession', 'Préemption', 'Servitude', 'Échange', 'Expropriation', 'Libération', 'Annulation EEDV-RCP'];
-  var typeOptions = ['', 'Bâti sans terrain', 'Non bâti', 'Bâti', 'Terrain'];
-  var ouiNonOptions = ['', 'Oui', 'Non'];
-  var importGimaOptions = ['', 'Import automatique', 'Exempté'];
-  var saisiesOptions = ['', 'Oui', 'Non'];
+  var communeOptions = uniqueValues('Commune');
+  var mouvementOptions = uniqueValues('Mouvement');
+  var typeOptions = uniqueValues('Type_Bien');
+  var occupationOptions = uniqueValues('Occupation');
+  var jouissanceAnticipeeOptions = uniqueValues('Jouissance_Anticipee');
+  var jouissanceDiffereeOptions = uniqueValues('Jouissance_Differee');
+  var nouvelleCoproOptions = uniqueValues('Nouvelle_Copropriete');
+  var bailOptions = uniqueValues('Bail_Longue_Duree');
+  var acqCompteOptions = uniqueValues('Acquisition_Compte_Tiers');
+  var prefinancementOptions = uniqueValues('Prefinancement');
+  var importGimaOptions = uniqueValues('Import_GIMA');
+  var saisiesOptions = uniqueValues('Saisies_Manuelles');
 
   var html = '';
 
@@ -1458,8 +1468,8 @@ function buildFormHtml(bien) {
   html += '<div class="form-group"><label>Surface parcelle (m²)</label><input type="text" id="f-Surface_Parcelle" value="' + v('Surface_Parcelle') + '" /></div>';
   html += '<div class="form-group"><label>Surface assurance (m²)</label><input type="text" id="f-Surface_Assurance" value="' + v('Surface_Assurance') + '" /></div>';
   html += '<div class="form-group"><label>Nouvelle copropriété</label><select id="f-Nouvelle_Copropriete">';
-  for (var i = 0; i < ouiNonOptions.length; i++) {
-    html += '<option value="' + ouiNonOptions[i] + '"' + (v('Nouvelle_Copropriete') === ouiNonOptions[i] ? ' selected' : '') + '>' + (ouiNonOptions[i] || t('select')) + '</option>';
+  for (var i = 0; i < nouvelleCoproOptions.length; i++) {
+    html += '<option value="' + nouvelleCoproOptions[i] + '"' + (v('Nouvelle_Copropriete') === nouvelleCoproOptions[i] ? ' selected' : '') + '>' + (nouvelleCoproOptions[i] || t('select')) + '</option>';
   }
   html += '</select></div>';
   html += '</div></div>';
@@ -1468,24 +1478,24 @@ function buildFormHtml(bien) {
   html += '<div class="form-section"><h4>🏠 ' + t('sectionOccupation') + '</h4>';
   html += '<div class="form-grid">';
   html += '<div class="form-group"><label>Occupation</label><select id="f-Occupation">';
-  for (var i = 0; i < ouiNonOptions.length; i++) {
-    html += '<option value="' + ouiNonOptions[i] + '"' + (v('Occupation') === ouiNonOptions[i] ? ' selected' : '') + '>' + (ouiNonOptions[i] || t('select')) + '</option>';
+  for (var i = 0; i < occupationOptions.length; i++) {
+    html += '<option value="' + occupationOptions[i] + '"' + (v('Occupation') === occupationOptions[i] ? ' selected' : '') + '>' + (occupationOptions[i] || t('select')) + '</option>';
   }
   html += '</select></div>';
   html += '<div class="form-group"><label>Jouissance anticipée</label><select id="f-Jouissance_Anticipee">';
-  for (var i = 0; i < ouiNonOptions.length; i++) {
-    html += '<option value="' + ouiNonOptions[i] + '"' + (v('Jouissance_Anticipee') === ouiNonOptions[i] ? ' selected' : '') + '>' + (ouiNonOptions[i] || t('select')) + '</option>';
+  for (var i = 0; i < jouissanceAnticipeeOptions.length; i++) {
+    html += '<option value="' + jouissanceAnticipeeOptions[i] + '"' + (v('Jouissance_Anticipee') === jouissanceAnticipeeOptions[i] ? ' selected' : '') + '>' + (jouissanceAnticipeeOptions[i] || t('select')) + '</option>';
   }
   html += '</select></div>';
   html += '<div class="form-group"><label>Jouissance différée</label><select id="f-Jouissance_Differee">';
-  for (var i = 0; i < ouiNonOptions.length; i++) {
-    html += '<option value="' + ouiNonOptions[i] + '"' + (v('Jouissance_Differee') === ouiNonOptions[i] ? ' selected' : '') + '>' + (ouiNonOptions[i] || t('select')) + '</option>';
+  for (var i = 0; i < jouissanceDiffereeOptions.length; i++) {
+    html += '<option value="' + jouissanceDiffereeOptions[i] + '"' + (v('Jouissance_Differee') === jouissanceDiffereeOptions[i] ? ' selected' : '') + '>' + (jouissanceDiffereeOptions[i] || t('select')) + '</option>';
   }
   html += '</select></div>';
   html += '<div class="form-group"><label>Temps portage - Année fin</label><input type="text" id="f-Temps_Portage" value="' + v('Temps_Portage') + '" /></div>';
   html += '<div class="form-group"><label>Mis à bail longue durée</label><select id="f-Bail_Longue_Duree">';
-  for (var i = 0; i < ouiNonOptions.length; i++) {
-    html += '<option value="' + ouiNonOptions[i] + '"' + (v('Bail_Longue_Duree') === ouiNonOptions[i] ? ' selected' : '') + '>' + (ouiNonOptions[i] || t('select')) + '</option>';
+  for (var i = 0; i < bailOptions.length; i++) {
+    html += '<option value="' + bailOptions[i] + '"' + (v('Bail_Longue_Duree') === bailOptions[i] ? ' selected' : '') + '>' + (bailOptions[i] || t('select')) + '</option>';
   }
   html += '</select></div>';
   html += '</div></div>';
@@ -1494,13 +1504,13 @@ function buildFormHtml(bien) {
   html += '<div class="form-section"><h4>💰 ' + t('sectionFinancement') + '</h4>';
   html += '<div class="form-grid">';
   html += '<div class="form-group"><label>Acquisition compte tiers</label><select id="f-Acquisition_Compte_Tiers">';
-  for (var i = 0; i < ouiNonOptions.length; i++) {
-    html += '<option value="' + ouiNonOptions[i] + '"' + (v('Acquisition_Compte_Tiers') === ouiNonOptions[i] ? ' selected' : '') + '>' + (ouiNonOptions[i] || t('select')) + '</option>';
+  for (var i = 0; i < acqCompteOptions.length; i++) {
+    html += '<option value="' + acqCompteOptions[i] + '"' + (v('Acquisition_Compte_Tiers') === acqCompteOptions[i] ? ' selected' : '') + '>' + (acqCompteOptions[i] || t('select')) + '</option>';
   }
   html += '</select></div>';
   html += '<div class="form-group"><label>Préfinancement</label><select id="f-Prefinancement">';
-  for (var i = 0; i < ouiNonOptions.length; i++) {
-    html += '<option value="' + ouiNonOptions[i] + '"' + (v('Prefinancement') === ouiNonOptions[i] ? ' selected' : '') + '>' + (ouiNonOptions[i] || t('select')) + '</option>';
+  for (var i = 0; i < prefinancementOptions.length; i++) {
+    html += '<option value="' + prefinancementOptions[i] + '"' + (v('Prefinancement') === prefinancementOptions[i] ? ' selected' : '') + '>' + (prefinancementOptions[i] || t('select')) + '</option>';
   }
   html += '</select></div>';
   html += '<div class="form-group"><label>Tiers Vendeur ou Acquéreur</label><input type="text" id="f-Tiers_Vendeur_Acquereur" value="' + v('Tiers_Vendeur_Acquereur') + '" /></div>';
