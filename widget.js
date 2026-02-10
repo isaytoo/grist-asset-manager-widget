@@ -1245,7 +1245,14 @@ function openDeleteConfirmModal(bien) {
 
 function buildFormHtml(bien) {
   var isEdit = !!bien;
-  var v = function(field) { return isEdit ? sanitize(bien[field] || '') : ''; };
+  var v = function(field) {
+    if (!isEdit) return '';
+    if (field === 'Date_Acte') {
+      var d = parseDateFR(bien[field]);
+      if (d) { var mm = String(d.getMonth()+1).padStart(2,'0'); var dd = String(d.getDate()).padStart(2,'0'); return d.getFullYear() + '-' + mm + '-' + dd; }
+    }
+    return sanitize(bien[field] || '');
+  };
 
   var mouvementOptions = ['', 'Acquisition', 'Cession', 'Préemption', 'Servitude', 'Échange', 'Expropriation', 'Libération', 'Annulation EEDV-RCP'];
   var typeOptions = ['', 'Bâti sans terrain', 'Non bâti', 'Bâti', 'Terrain'];
@@ -1788,17 +1795,17 @@ function renderDashboardView() {
     var isCesB = mouvB.indexOf('CESSION') !== -1;
     // CESSION = cession, everything else = acquisition (like reference app)
     if (isCesB) {
-      detailCes.push({ ref: b.Reference_DDC, commune: b.Commune, adresse: b.Adresse, type: b.Type_Bien, mouvement: b.Mouvement, surface: spB, date: b.Date_Acte, annee: b.Annee });
+      detailCes.push({ ref: b.Reference_DDC, commune: b.Commune, adresse: b.Adresse, type: b.Type_Bien, mouvement: b.Mouvement, surface: spB, date: formatDateFR(parseDateFR(b.Date_Acte)) || b.Date_Acte, annee: b.Annee });
     } else {
-      detailAcq.push({ ref: b.Reference_DDC, commune: b.Commune, adresse: b.Adresse, type: b.Type_Bien, mouvement: b.Mouvement, surface: spB, date: b.Date_Acte, annee: b.Annee });
+      detailAcq.push({ ref: b.Reference_DDC, commune: b.Commune, adresse: b.Adresse, type: b.Type_Bien, mouvement: b.Mouvement, surface: spB, date: formatDateFR(parseDateFR(b.Date_Acte)) || b.Date_Acte, annee: b.Annee });
     }
     // Bâti: all SPI items with surfaceBati
     if (sbB !== 0) {
-      detailBati.push({ ref: b.Reference_DDC, commune: b.Commune, adresse: b.Adresse, mouvement: b.Mouvement, surface: sbB, date: b.Date_Acte, annee: b.Annee });
+      detailBati.push({ ref: b.Reference_DDC, commune: b.Commune, adresse: b.Adresse, mouvement: b.Mouvement, surface: sbB, date: formatDateFR(parseDateFR(b.Date_Acte)) || b.Date_Acte, annee: b.Annee });
     }
     // Non Bâti: all SPI items with surfaceParcelle (= surface non bâti in reference app)
     if (spB !== 0) {
-      detailNonBati.push({ ref: b.Reference_DDC, commune: b.Commune, adresse: b.Adresse, mouvement: b.Mouvement, surface: spB, date: b.Date_Acte, annee: b.Annee });
+      detailNonBati.push({ ref: b.Reference_DDC, commune: b.Commune, adresse: b.Adresse, mouvement: b.Mouvement, surface: spB, date: formatDateFR(parseDateFR(b.Date_Acte)) || b.Date_Acte, annee: b.Annee });
     }
   }
   detailAcq.sort(function(a, b) { return b.surface - a.surface; });
