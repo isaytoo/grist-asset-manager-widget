@@ -1392,30 +1392,37 @@ function buildFormHtml(bien) {
     return sanitize(bien[field] || '');
   };
 
-  // Helper: extract unique sorted values from a field across all biens
-  function uniqueValues(field) {
+  // Helper: merge reference values + unique values from DB, sorted, deduplicated
+  function mergedOptions(field, refValues) {
     var set = {};
+    // Add reference values first
+    for (var r = 0; r < refValues.length; r++) {
+      var rv = refValues[r].trim();
+      if (rv) set[rv.toUpperCase()] = rv;
+    }
+    // Add values from existing data (keeps DB values not in reference list)
     for (var i = 0; i < biens.length; i++) {
       var val = String(biens[i][field] || '').trim();
-      if (val) set[val.toUpperCase()] = val;
+      if (val && !set[val.toUpperCase()]) set[val.toUpperCase()] = val;
     }
     var arr = [''];
     Object.keys(set).sort().forEach(function(k) { arr.push(set[k]); });
     return arr;
   }
 
-  var communeOptions = uniqueValues('Commune');
-  var mouvementOptions = uniqueValues('Mouvement');
-  var typeOptions = uniqueValues('Type_Bien');
-  var occupationOptions = uniqueValues('Occupation');
-  var jouissanceAnticipeeOptions = uniqueValues('Jouissance_Anticipee');
-  var jouissanceDiffereeOptions = uniqueValues('Jouissance_Differee');
-  var nouvelleCoproOptions = uniqueValues('Nouvelle_Copropriete');
-  var bailOptions = uniqueValues('Bail_Longue_Duree');
-  var acqCompteOptions = uniqueValues('Acquisition_Compte_Tiers');
-  var prefinancementOptions = uniqueValues('Prefinancement');
-  var importGimaOptions = uniqueValues('Import_GIMA');
-  var saisiesOptions = uniqueValues('Saisies_Manuelles');
+  // Reference values aligned with patrimoine-moderne
+  var communeOptions = mergedOptions('Commune', []);
+  var mouvementOptions = mergedOptions('Mouvement', ['Acquisition', 'Cession', 'Échange', 'Expropriation', 'Libération', 'Préemption', 'Servitude']);
+  var typeOptions = mergedOptions('Type_Bien', ['Bâti', 'Bâti sans terrain', 'Non bâti', 'Terrain']);
+  var occupationOptions = mergedOptions('Occupation', ['Libre', 'Occupée', 'Partiellement occupée']);
+  var jouissanceAnticipeeOptions = mergedOptions('Jouissance_Anticipee', ['Oui', 'Non']);
+  var jouissanceDiffereeOptions = mergedOptions('Jouissance_Differee', ['Oui', 'Non']);
+  var nouvelleCoproOptions = mergedOptions('Nouvelle_Copropriete', ['Oui', 'Non']);
+  var bailOptions = mergedOptions('Bail_Longue_Duree', ['Oui', 'Non']);
+  var acqCompteOptions = mergedOptions('Acquisition_Compte_Tiers', ['Oui', 'Non']);
+  var prefinancementOptions = mergedOptions('Prefinancement', ['Oui', 'Non']);
+  var importGimaOptions = mergedOptions('Import_GIMA', ['Import automatique', 'Absent de l\'import', 'Exempté']);
+  var saisiesOptions = mergedOptions('Saisies_Manuelles', ['Oui', 'Non', 'Création manuelle']);
 
   var html = '';
 
