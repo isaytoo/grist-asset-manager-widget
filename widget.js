@@ -447,23 +447,33 @@ function movementBadge(mouvement) {
   return '<span class="badge badge-other">' + sanitize(mouvement) + '</span>';
 }
 
-// =============================================================================
 // TAB SWITCHING
 // =============================================================================
 
 function updateOwnerTabs() {
-  var ownerOnlyTabs = ['dashboard', 'import', 'gestionnaires'];
-  ownerOnlyTabs.forEach(function(tab) {
+  // Owner-only tabs: Dashboard, Import, Gestionnaires
+  ['dashboard', 'import', 'gestionnaires'].forEach(function(tab) {
     var btn = document.querySelector('[data-tab="' + tab + '"]');
     if (btn) btn.style.display = isOwner ? '' : 'none';
     var content = document.getElementById('tab-' + tab);
     if (content && !isOwner) content.classList.remove('active');
   });
+
+  // Gestion des Biens: visible for Owner + Gestionnaires, hidden for Viewers
+  var gestionBtn = document.querySelector('[data-tab="gestion"]');
+  if (gestionBtn) gestionBtn.style.display = canManage ? '' : 'none';
+  var gestionContent = document.getElementById('tab-gestion');
+  if (gestionContent && !canManage) gestionContent.classList.remove('active');
+
+  // FAB: hidden for Viewers
+  var fab = document.getElementById('fab-add');
+  if (fab) fab.style.display = canManage ? '' : 'none';
 }
 
 function switchTab(tabId) {
   // Block non-owners from accessing owner-only tabs
   if ((tabId === 'dashboard' || tabId === 'import' || tabId === 'gestionnaires') && !isOwner) return;
+  if (tabId === 'gestion' && !canManage) return;
 
   document.querySelectorAll('.tab-btn').forEach(function(btn) {
     btn.classList.toggle('active', btn.getAttribute('data-tab') === tabId);
