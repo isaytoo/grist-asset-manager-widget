@@ -1768,13 +1768,13 @@ function buildPieChart(slices, size) {
   }
 
   // Pass 2: draw all labels on top of all segments
-  var fontSize = size > 180 ? 13 : 11;
+  var fontSize = size > 180 ? 11 : 9;
   for (var j = 0; j < labelData.length; j++) {
     if (labelData[j].pct <= 0.05) continue;
     var labelR = (r - 4) * 0.55;
     var lx = cx + labelR * Math.cos(labelData[j].midAngle);
     var ly = cy + labelR * Math.sin(labelData[j].midAngle);
-    var labelVal = Math.round(Math.abs(labelData[j].value)).toLocaleString() + ' m²';
+    var labelVal = Math.round(Math.abs(labelData[j].value)).toLocaleString('fr-FR') + ' m²';
     var textW = labelVal.length * fontSize * 0.6;
     var textH = fontSize + 8;
     svg += '<rect x="' + (lx - textW/2 - 6) + '" y="' + (ly - textH/2) + '" width="' + (textW + 12) + '" height="' + textH + '" rx="4" fill="rgba(255,255,255,0.9)" />';
