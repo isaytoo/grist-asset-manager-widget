@@ -1104,6 +1104,7 @@ function openDetailModal(bienId) {
     var val = b[col.id];
     var displayVal = val ? sanitize(String(val)) : '--';
     if (col.id === 'Mouvement') displayVal = movementBadge(val);
+    if (col.id === 'Date_Acte' || col.id === 'Date_Integration_GIMA') { var fd = formatDateFR(parseDateFR(val)); if (fd) displayVal = sanitize(fd); }
     var fullClass = (col.id === 'Nature_Bien' || col.id === 'Observation') ? ' full-width' : '';
     html += '<div class="detail-item' + fullClass + '">';
     html += '<div class="detail-label">' + colLabel(col) + '</div>';
@@ -1247,7 +1248,7 @@ function buildFormHtml(bien) {
   var isEdit = !!bien;
   var v = function(field) {
     if (!isEdit) return '';
-    if (field === 'Date_Acte') {
+    if (field === 'Date_Acte' || field === 'Date_Integration_GIMA') {
       var d = parseDateFR(bien[field]);
       if (d) { var mm = String(d.getMonth()+1).padStart(2,'0'); var dd = String(d.getDate()).padStart(2,'0'); return d.getFullYear() + '-' + mm + '-' + dd; }
     }
