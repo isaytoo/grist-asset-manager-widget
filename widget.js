@@ -1421,18 +1421,20 @@ function buildFormHtml(bien) {
   // Dynamic from DB
   var communeOptions = uniqueFromDB('Commune');
 
-  // Fixed reference lists (normalized, aligned with patrimoine-moderne)
+  // Fixed reference lists (normalized)
   var mouvementOptions = fixedOptions(['Acquisition', 'Cession', 'Échange', 'Expropriation', 'Libération', 'Préemption', 'Servitude']);
   var typeOptions = fixedOptions(['Bâti avec terrain', 'Bâti sans terrain', 'Terrain nu']);
-  var occupationOptions = fixedOptions(['Libre', 'Occupée', 'Partiellement occupée']);
-  var jouissanceAnticipeeOptions = fixedOptions(['Oui', 'Non']);
-  var jouissanceDiffereeOptions = fixedOptions(['Oui', 'Non']);
-  var nouvelleCoproOptions = fixedOptions(['Oui', 'Non']);
-  var bailOptions = fixedOptions(['Oui', 'Non']);
-  var acqCompteOptions = fixedOptions(['Oui', 'Non']);
-  var prefinancementOptions = fixedOptions(['Oui', 'Non']);
-  var importGimaOptions = fixedOptions(['Import automatique', 'Absent de l\'import', 'Exempté']);
-  var saisiesOptions = fixedOptions(['Oui', 'Non', 'Création manuelle']);
+
+  // Dynamic from DB (calés sur les données existantes)
+  var occupationOptions = uniqueFromDB('Occupation');
+  var jouissanceAnticipeeOptions = uniqueFromDB('Jouissance_Anticipee');
+  var jouissanceDiffereeOptions = uniqueFromDB('Jouissance_Differee');
+  var nouvelleCoproOptions = uniqueFromDB('Nouvelle_Copropriete');
+  var bailOptions = uniqueFromDB('Bail_Longue_Duree');
+  var acqCompteOptions = uniqueFromDB('Acquisition_Compte_Tiers');
+  var prefinancementOptions = uniqueFromDB('Prefinancement');
+  var importGimaOptions = uniqueFromDB('Import_GIMA');
+  var saisiesOptions = uniqueFromDB('Saisies_Manuelles');
 
   var html = '';
 
