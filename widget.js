@@ -3225,27 +3225,44 @@ if (!isInsideGrist()) {
       console.warn('Could not create/fix helper table:', e.message);
     }
 
-    // Step 2: Insert a fresh row to trigger the formula, then read the email
+    // Step 2: Read the email using the REST API with the access token
+    // The widget token via grist.docApi always has Owner privileges,
+    // but the access token from getAccessToken respects "View As".
     var currentUserEmail = '';
     try {
-      // Clean old rows and insert a fresh one to get current user email
-      var existingData = await grist.docApi.fetchTable(USER_INFO_TABLE);
-      var rowIds = (existingData && existingData.id) ? existingData.id : [];
-      var actions = [];
-      // Remove old rows
-      for (var r = 0; r < rowIds.length; r++) {
-        actions.push(['RemoveRecord', USER_INFO_TABLE, rowIds[r]]);
+      // Try to refresh: delete old rows + insert fresh one
+      try {
+        var existingData = await grist.docApi.fetchTable(USER_INFO_TABLE);
+        var rowIds = (existingData && existingData.id) ? existingData.id : [];
+        var actions = [];
+        for (var r = 0; r < rowIds.length; r++) {
+          actions.push(['RemoveRecord', USER_INFO_TABLE, rowIds[r]]);
+        }
+        actions.push(['AddRecord', USER_INFO_TABLE, null, {}]);
+        await grist.docApi.applyUserActions(actions);
+        console.log('Refreshed helper table row');
+      } catch (writeErr) {
+        console.log('Could not refresh row (read-only?):', writeErr.message);
       }
-      // Add fresh row (trigger formula will fill UserEmail)
-      actions.push(['AddRecord', USER_INFO_TABLE, null, {}]);
-      await grist.docApi.applyUserActions(actions);
 
-      // Read the freshly created row
-      var userInfoData = await grist.docApi.fetchTable(USER_INFO_TABLE);
-      if (userInfoData && userInfoData.UserEmail && userInfoData.UserEmail.length > 0) {
-        currentUserEmail = userInfoData.UserEmail[0] || '';
+      // Read via REST API using access token (respects View As)
+      var tokenInfo = await grist.docApi.getAccessToken({ readOnly: true });
+      var tableResp = await fetch(tokenInfo.baseUrl + '/tables/' + USER_INFO_TABLE + '/records?auth=' + tokenInfo.token);
+      if (tableResp.ok) {
+        var tableData = await tableResp.json();
+        console.log('BM_UserInfo REST response:', JSON.stringify(tableData));
+        if (tableData.records && tableData.records.length > 0) {
+          currentUserEmail = tableData.records[0].fields.UserEmail || '';
+        }
+      } else {
+        console.warn('REST read of BM_UserInfo failed:', tableResp.status);
+        // Fallback to docApi
+        var userInfoData = await grist.docApi.fetchTable(USER_INFO_TABLE);
+        if (userInfoData && userInfoData.UserEmail && userInfoData.UserEmail.length > 0) {
+          currentUserEmail = userInfoData.UserEmail[0] || '';
+        }
       }
-      console.log('Current user email from trigger formula:', currentUserEmail);
+      console.log('Current user email:', currentUserEmail);
     } catch (e) {
       console.warn('Could not read helper table:', e.message);
     }
