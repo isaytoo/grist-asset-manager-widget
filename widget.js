@@ -3182,50 +3182,70 @@ if (!isInsideGrist()) {
     // 3. Read /access to get the user list with roles
     // 4. Match email → determine role
 
-    // Step 1: Ensure helper table exists with a formula column
+    // Step 1: Ensure helper table exists with a TRIGGER formula column
+    // user.Email only works in trigger formulas (not regular formulas).
+    // Strategy: create a column with recalcWhen='always' so it re-evaluates
+    // on every access. Then insert a new row → trigger fires → email is written.
     var USER_INFO_TABLE = 'BM_UserInfo';
     try {
       var tables = await grist.docApi.listTables();
       if (tables.indexOf(USER_INFO_TABLE) === -1) {
-        // Create table with a plain column first
+        // Create table with a plain Text column
         await grist.docApi.applyUserActions([
           ['AddTable', USER_INFO_TABLE, [
             { id: 'UserEmail', fields: { type: 'Text', label: 'UserEmail' } }
           ]]
         ]);
-        // Convert column to formula
+        // Set trigger formula: recalculate on every change (recalcWhen = 2 = always)
         await grist.docApi.applyUserActions([
-          ['ModifyColumn', USER_INFO_TABLE, 'UserEmail', { isFormula: true, formula: 'user.Email' }],
-          ['AddRecord', USER_INFO_TABLE, null, {}]
+          ['ModifyColumn', USER_INFO_TABLE, 'UserEmail', {
+            isFormula: false,
+            formula: 'user.Email',
+            recalcWhen: 2,
+            recalcDeps: null
+          }]
         ]);
-        console.log('Created helper table', USER_INFO_TABLE);
+        console.log('Created helper table with trigger formula');
       } else {
-        // Table exists — check if column is a formula, fix if not
-        var checkData = await grist.docApi.fetchTable(USER_INFO_TABLE);
-        if (checkData && checkData.UserEmail && checkData.UserEmail.length > 0 && !checkData.UserEmail[0]) {
-          // Column exists but empty → probably not a formula, fix it
+        // Table exists — fix column if needed (convert to trigger formula)
+        try {
           await grist.docApi.applyUserActions([
-            ['ModifyColumn', USER_INFO_TABLE, 'UserEmail', { isFormula: true, formula: 'user.Email' }]
+            ['ModifyColumn', USER_INFO_TABLE, 'UserEmail', {
+              isFormula: false,
+              formula: 'user.Email',
+              recalcWhen: 2,
+              recalcDeps: null
+            }]
           ]);
-          // Ensure at least one row
-          if (!checkData.id || checkData.id.length === 0) {
-            await grist.docApi.applyUserActions([['AddRecord', USER_INFO_TABLE, null, {}]]);
-          }
-          console.log('Fixed helper table formula');
+        } catch (e2) {
+          console.warn('Could not fix column:', e2.message);
         }
       }
     } catch (e) {
       console.warn('Could not create/fix helper table:', e.message);
     }
 
-    // Step 2: Read the helper table to get real user email
+    // Step 2: Insert a fresh row to trigger the formula, then read the email
     var currentUserEmail = '';
     try {
+      // Clean old rows and insert a fresh one to get current user email
+      var existingData = await grist.docApi.fetchTable(USER_INFO_TABLE);
+      var rowIds = (existingData && existingData.id) ? existingData.id : [];
+      var actions = [];
+      // Remove old rows
+      for (var r = 0; r < rowIds.length; r++) {
+        actions.push(['RemoveRecord', USER_INFO_TABLE, rowIds[r]]);
+      }
+      // Add fresh row (trigger formula will fill UserEmail)
+      actions.push(['AddRecord', USER_INFO_TABLE, null, {}]);
+      await grist.docApi.applyUserActions(actions);
+
+      // Read the freshly created row
       var userInfoData = await grist.docApi.fetchTable(USER_INFO_TABLE);
       if (userInfoData && userInfoData.UserEmail && userInfoData.UserEmail.length > 0) {
         currentUserEmail = userInfoData.UserEmail[0] || '';
       }
-      console.log('Current user email from formula:', currentUserEmail);
+      console.log('Current user email from trigger formula:', currentUserEmail);
     } catch (e) {
       console.warn('Could not read helper table:', e.message);
     }
