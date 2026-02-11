@@ -9,6 +9,7 @@ var GESTIONNAIRES_TABLE = 'BM_Gestionnaires';
 var biens = [];
 var gestionnaires = [];
 var isOwner = false;
+var isEditor = false;
 var canManage = false; // Owner OR designated gestionnaire
 var currentLang = 'fr';
 var searchPage = 1;
@@ -3154,14 +3155,8 @@ async function loadAllData() {
 }
 
 function updateCanManage() {
-  // Owner can always manage
-  if (isOwner) { canManage = true; return; }
-  // Check if current user is in gestionnaires list
-  // Since we can't easily get current user email in Grist widget API,
-  // we default to: if user has full access and is not owner, check gestionnaires
-  // For now, if there are gestionnaires and user has full access, allow management
-  // The real check would need the user's email from Grist
-  canManage = isOwner;
+  // Owner and Editor can manage biens
+  canManage = isOwner || isEditor;
 }
 
 // =============================================================================
@@ -3175,26 +3170,56 @@ if (!isInsideGrist()) {
   (async function() {
     await grist.ready({ requiredAccess: 'full' });
 
-    // Detect owner/manager permissions.
-    // On self-hosted Grist, the widget token always has Owner privileges,
-    // so REST /access and fetchTable('_grist_ACLRules') always succeed.
-    // The ONLY reliable test is applyUserActions([]) which respects "View As":
-    //   - Owner/Editor: succeeds (can write)
-    //   - Viewer: fails ("Only owners or editors can modify documents")
-    // We treat Owner+Editor the same (isOwner=true) since only the Owner can
-    // grant "full" access to the widget. Fine-grained control uses the
-    // Gestionnaires system built into the widget.
+    // Detect role via REST API /access endpoint
+    // This returns the real user role even on self-hosted Grist
     try {
-      await grist.docApi.applyUserActions([]);
-      isOwner = true;
-      console.log('User can write → isOwner: true');
+      var tokenInfo = await grist.docApi.getAccessToken({ readOnly: true });
+      var accessResp = await fetch(tokenInfo.baseUrl + '/access?auth=' + tokenInfo.token);
+      if (accessResp.ok) {
+        var accessData = await accessResp.json();
+        var maxRole = accessData.maxInheritedRole || '';
+        // Find current user's access level
+        var users = accessData.users || [];
+        var tokenResp2 = await fetch(tokenInfo.baseUrl.replace(/\/api\/docs\/.*/, '/api/session/access/active') + '?auth=' + tokenInfo.token);
+        if (tokenResp2.ok) {
+          var sessionData = await tokenResp2.json();
+          var userEmail = (sessionData.user && sessionData.user.email) || '';
+          var userAccess = '';
+          for (var i = 0; i < users.length; i++) {
+            if (users[i].email === userEmail) {
+              userAccess = users[i].access;
+              break;
+            }
+          }
+          if (userAccess === 'owners') {
+            isOwner = true; isEditor = false;
+          } else if (userAccess === 'editors') {
+            isOwner = false; isEditor = true;
+          } else {
+            isOwner = false; isEditor = false;
+          }
+          console.log('User role from API:', userAccess, '(email:', userEmail, ')');
+        } else {
+          throw new Error('Cannot get session info');
+        }
+      } else {
+        throw new Error('Cannot get access info');
+      }
     } catch (e) {
-      isOwner = false;
-      console.log('User cannot write → isOwner: false (' + e.message + ')');
+      console.warn('Role detection via API failed, falling back to write test:', e.message);
+      // Fallback: applyUserActions test (Owner+Editor both succeed)
+      try {
+        await grist.docApi.applyUserActions([]);
+        isOwner = true; isEditor = false;
+        console.log('Fallback: user can write → treating as Owner');
+      } catch (e2) {
+        isOwner = false; isEditor = false;
+        console.log('Fallback: user cannot write → Viewer');
+      }
     }
-    console.log('isOwner:', isOwner);
+    console.log('isOwner:', isOwner, 'isEditor:', isEditor);
 
-    canManage = isOwner;
+    canManage = isOwner || isEditor;
     updateOwnerTabs();
 
     await ensureTables();
