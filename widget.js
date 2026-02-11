@@ -3170,54 +3170,78 @@ if (!isInsideGrist()) {
   (async function() {
     await grist.ready({ requiredAccess: 'full' });
 
-    // Detect role using multiple methods
-    // Method 1: grist.getAccessLevel() — returns 'full', 'read table', 'none'
-    //   This tells us what the WIDGET was granted, not the USER role.
-    // Method 2: Try modifying ACL resources (only Owner can)
-    //   On self-hosted, widget token has Owner privileges, but "View As" restricts it.
-    // Method 3: Check _grist_ACLPrincipals for current user's role
-    var detected = false;
-    try {
-      // Try to read ACL principals to find current user role
-      var tokenInfo = await grist.docApi.getAccessToken({ readOnly: true });
-      // Get current user email from session
-      var sessionUrl = tokenInfo.baseUrl.replace(/\/api\/docs\/.*/, '/api/session/access/active');
-      var sessionResp = await fetch(sessionUrl + '?auth=' + tokenInfo.token);
-      if (sessionResp.ok) {
-        var sessionData = await sessionResp.json();
-        var userEmail = (sessionData.user && sessionData.user.email) || '';
-        var userAccess = (sessionData.access && sessionData.access.role) || '';
-        console.log('Session data:', JSON.stringify(sessionData));
-        console.log('User email:', userEmail, 'access:', userAccess);
+    // Detect role using a helper table with user.Email formula
+    // On self-hosted Grist, the widget token always has Owner privileges,
+    // so REST API calls always return "owners". The only reliable way to get
+    // the real user is via a Grist formula: user.Email is evaluated server-side
+    // and respects "View As" mode.
+    //
+    // Strategy:
+    // 1. Ensure a helper table BM_UserInfo exists with a formula column = user.Email
+    // 2. Read that table → get the real current user email
+    // 3. Read /access to get the user list with roles
+    // 4. Match email → determine role
 
-        // Try /access endpoint to get user list with roles
+    // Step 1: Ensure helper table exists
+    var USER_INFO_TABLE = 'BM_UserInfo';
+    try {
+      var tables = await grist.docApi.listTables();
+      if (tables.indexOf(USER_INFO_TABLE) === -1) {
+        await grist.docApi.applyUserActions([
+          ['AddTable', USER_INFO_TABLE, [
+            { id: 'UserEmail', fields: { type: 'Text', label: 'UserEmail', isFormula: true, formula: 'user.Email' } }
+          ]],
+          ['AddRecord', USER_INFO_TABLE, null, {}]
+        ]);
+        console.log('Created helper table', USER_INFO_TABLE);
+      }
+    } catch (e) {
+      console.warn('Could not create helper table:', e.message);
+    }
+
+    // Step 2: Read the helper table to get real user email
+    var currentUserEmail = '';
+    try {
+      var userInfoData = await grist.docApi.fetchTable(USER_INFO_TABLE);
+      if (userInfoData && userInfoData.UserEmail && userInfoData.UserEmail.length > 0) {
+        currentUserEmail = userInfoData.UserEmail[0] || '';
+      }
+      console.log('Current user email from formula:', currentUserEmail);
+    } catch (e) {
+      console.warn('Could not read helper table:', e.message);
+    }
+
+    // Step 3: Get user list with roles from /access
+    if (currentUserEmail) {
+      try {
+        var tokenInfo = await grist.docApi.getAccessToken({ readOnly: true });
         var accessResp = await fetch(tokenInfo.baseUrl + '/access?auth=' + tokenInfo.token);
         if (accessResp.ok) {
           var accessData = await accessResp.json();
           var users = accessData.users || [];
+          var userAccess = '';
           for (var i = 0; i < users.length; i++) {
-            if (users[i].email === userEmail) {
+            if (users[i].email === currentUserEmail) {
               userAccess = users[i].access;
               break;
             }
           }
+          if (userAccess === 'owners') {
+            isOwner = true; isEditor = false;
+          } else if (userAccess === 'editors') {
+            isOwner = false; isEditor = true;
+          } else {
+            isOwner = false; isEditor = false;
+          }
+          console.log('User role from /access:', userAccess);
         }
-
-        if (userAccess === 'owners') {
-          isOwner = true; isEditor = false; detected = true;
-        } else if (userAccess === 'editors') {
-          isOwner = false; isEditor = true; detected = true;
-        } else if (userAccess === 'viewers') {
-          isOwner = false; isEditor = false; detected = true;
-        }
-        console.log('Role detection result:', userAccess, 'detected:', detected);
+      } catch (e) {
+        console.warn('Could not read /access:', e.message);
       }
-    } catch (e) {
-      console.warn('Role detection via session/access failed:', e.message);
     }
 
-    if (!detected) {
-      // Fallback: write test (Owner+Editor succeed, Viewer fails)
+    // Fallback if no email detected
+    if (!currentUserEmail) {
       try {
         await grist.docApi.applyUserActions([]);
         isOwner = true; isEditor = false;
