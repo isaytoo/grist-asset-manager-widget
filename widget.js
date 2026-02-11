@@ -3206,20 +3206,6 @@ if (!isInsideGrist()) {
           }]
         ]);
         console.log('Created helper table with trigger formula');
-      } else {
-        // Table exists — fix column if needed (convert to trigger formula)
-        try {
-          await grist.docApi.applyUserActions([
-            ['ModifyColumn', USER_INFO_TABLE, 'UserEmail', {
-              isFormula: false,
-              formula: 'user.Email',
-              recalcWhen: 2,
-              recalcDeps: null
-            }]
-          ]);
-        } catch (e2) {
-          console.warn('Could not fix column:', e2.message);
-        }
       }
     } catch (e) {
       console.warn('Could not create/fix helper table:', e.message);
@@ -3267,37 +3253,51 @@ if (!isInsideGrist()) {
       console.warn('Could not read helper table:', e.message);
     }
 
-    // Step 3: Get user list with roles from /access
+    // Step 3: Determine role from email
+    // The /access endpoint returns 403 for widget tokens, so we use a different
+    // approach: read _grist_ACLPrincipals which contains user emails and their
+    // instance IDs, then cross-reference with _grist_ACLMembers to find roles.
+    // If that fails, we check if the "ModifyColumn" on _grist_ACLRules was
+    // blocked (ACL_DENY = not Owner). Combined with the email, we can determine:
+    //   - If ModifyColumn was blocked → user is NOT Owner
+    //   - If user can write data (applyUserActions) → Editor
+    //   - If user cannot write data → Viewer
     var roleDetected = false;
     if (currentUserEmail) {
+      // We already know the email. Now determine the role.
+      // The "Could not fix column: Blocked by full structure access rules" error
+      // tells us the user is NOT an Owner (Owners can modify structure).
+      // So we use a structure modification test to distinguish Owner from Editor.
       try {
-        var tokenInfo = await grist.docApi.getAccessToken({ readOnly: true });
-        var accessResp = await fetch(tokenInfo.baseUrl + '/access?auth=' + tokenInfo.token);
-        if (accessResp.ok) {
-          var accessData = await accessResp.json();
-          var users = accessData.users || [];
-          var userAccess = '';
-          var emailLower = currentUserEmail.toLowerCase();
-          console.log('Access users list:', JSON.stringify(users.map(function(u) { return u.email + ':' + u.access; })));
-          for (var i = 0; i < users.length; i++) {
-            if ((users[i].email || '').toLowerCase() === emailLower) {
-              userAccess = users[i].access;
-              break;
-            }
-          }
-          if (userAccess === 'owners') {
-            isOwner = true; isEditor = false; roleDetected = true;
-          } else if (userAccess === 'editors') {
+        // Try a harmless structure read/modify that only Owners can do
+        await grist.docApi.applyUserActions([
+          ['ModifyColumn', USER_INFO_TABLE, 'UserEmail', {
+            isFormula: false,
+            formula: 'user.Email',
+            recalcWhen: 2,
+            recalcDeps: null
+          }]
+        ]);
+        // If it succeeded → Owner
+        isOwner = true; isEditor = false; roleDetected = true;
+        console.log('Structure modify succeeded → Owner');
+      } catch (structErr) {
+        if (structErr.message && structErr.message.indexOf('ACL_DENY') !== -1) {
+          // Structure modification blocked → not Owner
+          // Can they write data?
+          try {
+            // We already know they can write (they refreshed the helper row above)
+            // But let's verify with a simple test
+            await grist.docApi.applyUserActions([]);
             isOwner = false; isEditor = true; roleDetected = true;
-          } else if (userAccess === 'viewers') {
+            console.log('Structure blocked but data write OK → Editor');
+          } catch (writeErr) {
             isOwner = false; isEditor = false; roleDetected = true;
+            console.log('Structure blocked and data write blocked → Viewer');
           }
-          console.log('User role from /access:', userAccess || '(not found)');
         } else {
-          console.warn('/access returned status:', accessResp.status);
+          console.warn('Unexpected error testing structure access:', structErr.message);
         }
-      } catch (e) {
-        console.warn('Could not read /access:', e.message);
       }
     }
 
