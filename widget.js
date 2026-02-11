@@ -3282,7 +3282,7 @@ if (!isInsideGrist()) {
         isOwner = true; isEditor = false; roleDetected = true;
         console.log('Structure modify succeeded → Owner');
       } catch (structErr) {
-        if (structErr.message && structErr.message.indexOf('ACL_DENY') !== -1) {
+        if (structErr.message && (structErr.message.indexOf('ACL_DENY') !== -1 || structErr.message.indexOf('Blocked by') !== -1 || structErr.message.indexOf('structure access') !== -1)) {
           // Structure modification blocked → not Owner
           // Can they write data?
           try {
