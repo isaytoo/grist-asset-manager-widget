@@ -3251,6 +3251,7 @@ if (!isInsideGrist()) {
     }
 
     // Step 3: Get user list with roles from /access
+    var roleDetected = false;
     if (currentUserEmail) {
       try {
         var tokenInfo = await grist.docApi.getAccessToken({ readOnly: true });
@@ -3259,28 +3260,32 @@ if (!isInsideGrist()) {
           var accessData = await accessResp.json();
           var users = accessData.users || [];
           var userAccess = '';
+          var emailLower = currentUserEmail.toLowerCase();
+          console.log('Access users list:', JSON.stringify(users.map(function(u) { return u.email + ':' + u.access; })));
           for (var i = 0; i < users.length; i++) {
-            if (users[i].email === currentUserEmail) {
+            if ((users[i].email || '').toLowerCase() === emailLower) {
               userAccess = users[i].access;
               break;
             }
           }
           if (userAccess === 'owners') {
-            isOwner = true; isEditor = false;
+            isOwner = true; isEditor = false; roleDetected = true;
           } else if (userAccess === 'editors') {
-            isOwner = false; isEditor = true;
-          } else {
-            isOwner = false; isEditor = false;
+            isOwner = false; isEditor = true; roleDetected = true;
+          } else if (userAccess === 'viewers') {
+            isOwner = false; isEditor = false; roleDetected = true;
           }
-          console.log('User role from /access:', userAccess);
+          console.log('User role from /access:', userAccess || '(not found)');
+        } else {
+          console.warn('/access returned status:', accessResp.status);
         }
       } catch (e) {
         console.warn('Could not read /access:', e.message);
       }
     }
 
-    // Fallback if no email detected
-    if (!currentUserEmail) {
+    // Fallback if role not detected
+    if (!roleDetected) {
       try {
         await grist.docApi.applyUserActions([]);
         isOwner = true; isEditor = false;
