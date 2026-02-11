@@ -3182,21 +3182,40 @@ if (!isInsideGrist()) {
     // 3. Read /access to get the user list with roles
     // 4. Match email → determine role
 
-    // Step 1: Ensure helper table exists
+    // Step 1: Ensure helper table exists with a formula column
     var USER_INFO_TABLE = 'BM_UserInfo';
     try {
       var tables = await grist.docApi.listTables();
       if (tables.indexOf(USER_INFO_TABLE) === -1) {
+        // Create table with a plain column first
         await grist.docApi.applyUserActions([
           ['AddTable', USER_INFO_TABLE, [
-            { id: 'UserEmail', fields: { type: 'Text', label: 'UserEmail', isFormula: true, formula: 'user.Email' } }
-          ]],
+            { id: 'UserEmail', fields: { type: 'Text', label: 'UserEmail' } }
+          ]]
+        ]);
+        // Convert column to formula
+        await grist.docApi.applyUserActions([
+          ['ModifyColumn', USER_INFO_TABLE, 'UserEmail', { isFormula: true, formula: 'user.Email' }],
           ['AddRecord', USER_INFO_TABLE, null, {}]
         ]);
         console.log('Created helper table', USER_INFO_TABLE);
+      } else {
+        // Table exists — check if column is a formula, fix if not
+        var checkData = await grist.docApi.fetchTable(USER_INFO_TABLE);
+        if (checkData && checkData.UserEmail && checkData.UserEmail.length > 0 && !checkData.UserEmail[0]) {
+          // Column exists but empty → probably not a formula, fix it
+          await grist.docApi.applyUserActions([
+            ['ModifyColumn', USER_INFO_TABLE, 'UserEmail', { isFormula: true, formula: 'user.Email' }]
+          ]);
+          // Ensure at least one row
+          if (!checkData.id || checkData.id.length === 0) {
+            await grist.docApi.applyUserActions([['AddRecord', USER_INFO_TABLE, null, {}]]);
+          }
+          console.log('Fixed helper table formula');
+        }
       }
     } catch (e) {
-      console.warn('Could not create helper table:', e.message);
+      console.warn('Could not create/fix helper table:', e.message);
     }
 
     // Step 2: Read the helper table to get real user email
