@@ -3170,54 +3170,64 @@ if (!isInsideGrist()) {
   (async function() {
     await grist.ready({ requiredAccess: 'full' });
 
-    // Detect role via REST API /access endpoint
-    // This returns the real user role even on self-hosted Grist
+    // Detect role using multiple methods
+    // Method 1: grist.getAccessLevel() — returns 'full', 'read table', 'none'
+    //   This tells us what the WIDGET was granted, not the USER role.
+    // Method 2: Try modifying ACL resources (only Owner can)
+    //   On self-hosted, widget token has Owner privileges, but "View As" restricts it.
+    // Method 3: Check _grist_ACLPrincipals for current user's role
+    var detected = false;
     try {
+      // Try to read ACL principals to find current user role
       var tokenInfo = await grist.docApi.getAccessToken({ readOnly: true });
-      var accessResp = await fetch(tokenInfo.baseUrl + '/access?auth=' + tokenInfo.token);
-      if (accessResp.ok) {
-        var accessData = await accessResp.json();
-        var maxRole = accessData.maxInheritedRole || '';
-        // Find current user's access level
-        var users = accessData.users || [];
-        var tokenResp2 = await fetch(tokenInfo.baseUrl.replace(/\/api\/docs\/.*/, '/api/session/access/active') + '?auth=' + tokenInfo.token);
-        if (tokenResp2.ok) {
-          var sessionData = await tokenResp2.json();
-          var userEmail = (sessionData.user && sessionData.user.email) || '';
-          var userAccess = '';
+      // Get current user email from session
+      var sessionUrl = tokenInfo.baseUrl.replace(/\/api\/docs\/.*/, '/api/session/access/active');
+      var sessionResp = await fetch(sessionUrl + '?auth=' + tokenInfo.token);
+      if (sessionResp.ok) {
+        var sessionData = await sessionResp.json();
+        var userEmail = (sessionData.user && sessionData.user.email) || '';
+        var userAccess = (sessionData.access && sessionData.access.role) || '';
+        console.log('Session data:', JSON.stringify(sessionData));
+        console.log('User email:', userEmail, 'access:', userAccess);
+
+        // Try /access endpoint to get user list with roles
+        var accessResp = await fetch(tokenInfo.baseUrl + '/access?auth=' + tokenInfo.token);
+        if (accessResp.ok) {
+          var accessData = await accessResp.json();
+          var users = accessData.users || [];
           for (var i = 0; i < users.length; i++) {
             if (users[i].email === userEmail) {
               userAccess = users[i].access;
               break;
             }
           }
-          if (userAccess === 'owners') {
-            isOwner = true; isEditor = false;
-          } else if (userAccess === 'editors') {
-            isOwner = false; isEditor = true;
-          } else {
-            isOwner = false; isEditor = false;
-          }
-          console.log('User role from API:', userAccess, '(email:', userEmail, ')');
-        } else {
-          throw new Error('Cannot get session info');
         }
-      } else {
-        throw new Error('Cannot get access info');
+
+        if (userAccess === 'owners') {
+          isOwner = true; isEditor = false; detected = true;
+        } else if (userAccess === 'editors') {
+          isOwner = false; isEditor = true; detected = true;
+        } else if (userAccess === 'viewers') {
+          isOwner = false; isEditor = false; detected = true;
+        }
+        console.log('Role detection result:', userAccess, 'detected:', detected);
       }
     } catch (e) {
-      console.warn('Role detection via API failed, falling back to write test:', e.message);
-      // Fallback: applyUserActions test (Owner+Editor both succeed)
+      console.warn('Role detection via session/access failed:', e.message);
+    }
+
+    if (!detected) {
+      // Fallback: write test (Owner+Editor succeed, Viewer fails)
       try {
         await grist.docApi.applyUserActions([]);
         isOwner = true; isEditor = false;
         console.log('Fallback: user can write → treating as Owner');
-      } catch (e2) {
+      } catch (e) {
         isOwner = false; isEditor = false;
         console.log('Fallback: user cannot write → Viewer');
       }
     }
-    console.log('isOwner:', isOwner, 'isEditor:', isEditor);
+    console.log('Final: isOwner:', isOwner, 'isEditor:', isEditor);
 
     canManage = isOwner || isEditor;
     updateOwnerTabs();
