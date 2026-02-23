@@ -15,7 +15,7 @@
 
 Real estate asset management widget for Grist. Full CRUD interface with advanced search, dashboard, and role-based access control.
 
-**Widget URL:** `https://grist-asset-manager-widget.vercel.app/index.html`
+**Widget URL:** `https://isaytoo.github.io/grist-asset-manager-widget/`
 
 ### 🚀 Quick Start
 
@@ -23,7 +23,7 @@ Real estate asset management widget for Grist. Full CRUD interface with advanced
 2. Select **"Custom"** as the widget type
 3. Enter the custom widget URL:
    ```
-   https://grist-asset-manager-widget.vercel.app/index.html
+   https://isaytoo.github.io/grist-asset-manager-widget/
    ```
 4. Set the access level to **"Full document access"**
 5. Done! Start managing your assets.
@@ -84,7 +84,7 @@ grist-asset-manager-widget/
 
 Widget de gestion de biens immobiliers pour Grist. Interface CRUD complète avec recherche avancée, tableau de bord et gestion des droits par rôle.
 
-**URL du widget :** `https://grist-asset-manager-widget.vercel.app/index.html`
+**URL du widget :** `https://isaytoo.github.io/grist-asset-manager-widget/`
 
 ### 🚀 Utilisation rapide
 
@@ -92,7 +92,7 @@ Widget de gestion de biens immobiliers pour Grist. Interface CRUD complète avec
 2. Sélectionnez **"Personnalisé"** comme type de widget
 3. Entrez l'URL :
    ```
-   https://grist-asset-manager-widget.vercel.app/index.html
+   https://isaytoo.github.io/grist-asset-manager-widget/
    ```
 4. Définissez le niveau d'accès sur **"Full document access"**
 5. C'est prêt ! Commencez à gérer vos biens.
