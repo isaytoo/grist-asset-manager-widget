@@ -4,6 +4,7 @@
 
 var BIENS_TABLE = 'BM_Biens';
 var GESTIONNAIRES_TABLE = 'BM_Gestionnaires';
+var PERMISSIONS_TABLE = 'BM_Permissions';
 
 // State
 var biens = [];
@@ -12,6 +13,8 @@ var isOwner = false;
 var isEditor = false;
 var canManage = false; // Owner OR designated gestionnaire
 var currentLang = 'fr';
+var currentUserEmail = '';
+var userAllowedTabs = []; // Tabs allowed for current user based on BM_Permissions
 var searchPage = 1;
 var searchPageSize = 20;
 var searchResults = [];
@@ -451,30 +454,40 @@ function movementBadge(mouvement) {
 // TAB SWITCHING
 // =============================================================================
 
+function isTabAllowed(tabId) {
+  // Owners always have access to everything
+  if (isOwner) return true;
+  // If user has custom permissions from BM_Permissions, use those
+  if (userAllowedTabs.length > 0) return userAllowedTabs.indexOf(tabId) !== -1;
+  // Fallback to role-based: editors see search + gestion, viewers see search only
+  if (tabId === 'search') return true;
+  if (tabId === 'gestion') return canManage;
+  return false;
+}
+
 function updateOwnerTabs() {
-  // Owner-only tabs: Dashboard, Import, Gestionnaires
-  ['dashboard', 'import', 'gestionnaires'].forEach(function(tab) {
+  var allTabs = ['search', 'gestion', 'dashboard', 'import', 'gestionnaires'];
+  allTabs.forEach(function(tab) {
     var btn = document.querySelector('[data-tab="' + tab + '"]');
-    if (btn) btn.style.display = isOwner ? '' : 'none';
+    if (btn) btn.style.display = isTabAllowed(tab) ? '' : 'none';
     var content = document.getElementById('tab-' + tab);
-    if (content && !isOwner) content.classList.remove('active');
+    if (content && !isTabAllowed(tab)) content.classList.remove('active');
   });
 
-  // Gestion des Biens: visible for Owner + Gestionnaires, hidden for Viewers
-  var gestionBtn = document.querySelector('[data-tab="gestion"]');
-  if (gestionBtn) gestionBtn.style.display = canManage ? '' : 'none';
-  var gestionContent = document.getElementById('tab-gestion');
-  if (gestionContent && !canManage) gestionContent.classList.remove('active');
-
-  // FAB: hidden for Viewers
+  // FAB: visible only if gestion tab is allowed
   var fab = document.getElementById('fab-add');
-  if (fab) fab.style.display = canManage ? '' : 'none';
+  if (fab) fab.style.display = isTabAllowed('gestion') ? '' : 'none';
+
+  // If current active tab is not allowed, switch to search
+  var activeBtn = document.querySelector('.tab-btn.active');
+  if (activeBtn && !isTabAllowed(activeBtn.getAttribute('data-tab'))) {
+    switchTab('search');
+  }
 }
 
 function switchTab(tabId) {
-  // Block non-owners from accessing owner-only tabs
-  if ((tabId === 'dashboard' || tabId === 'import' || tabId === 'gestionnaires') && !isOwner) return;
-  if (tabId === 'gestion' && !canManage) return;
+  // Block access to tabs not allowed for this user
+  if (!isTabAllowed(tabId)) return;
 
   document.querySelectorAll('.tab-btn').forEach(function(btn) {
     btn.classList.toggle('active', btn.getAttribute('data-tab') === tabId);
@@ -3215,7 +3228,7 @@ if (!isInsideGrist()) {
     // Step 2: Read the email using the REST API with the access token
     // The widget token via grist.docApi always has Owner privileges,
     // but the access token from getAccessToken respects "View As".
-    var currentUserEmail = '';
+    currentUserEmail = '';
     try {
       // Try to refresh: delete old rows + insert fresh one
       try {
@@ -3316,9 +3329,61 @@ if (!isInsideGrist()) {
     console.log('Final: isOwner:', isOwner, 'isEditor:', isEditor);
 
     canManage = isOwner || isEditor;
+
+    // Step 4: Load BM_Permissions to get per-email tab access
+    await ensurePermissionsTable();
+    await loadUserPermissions();
+
     updateOwnerTabs();
 
     await ensureTables();
     await loadAllData();
   })();
+}
+
+async function ensurePermissionsTable() {
+  try {
+    var tables = await grist.docApi.listTables();
+    if (tables.indexOf(PERMISSIONS_TABLE) === -1) {
+      await grist.docApi.applyUserActions([
+        ['AddTable', PERMISSIONS_TABLE, [
+          { id: 'Email', type: 'Text' },
+          { id: 'AllowedTabs', type: 'Text' }
+        ]]
+      ]);
+      // Add a default row for the owner
+      if (currentUserEmail) {
+        await grist.docApi.applyUserActions([
+          ['AddRecord', PERMISSIONS_TABLE, null, {
+            Email: currentUserEmail,
+            AllowedTabs: 'search,gestion,dashboard,import,gestionnaires'
+          }]
+        ]);
+      }
+      console.log('Created BM_Permissions table');
+    }
+  } catch (e) {
+    console.warn('Could not ensure BM_Permissions:', e.message);
+  }
+}
+
+async function loadUserPermissions() {
+  userAllowedTabs = [];
+  try {
+    var data = await grist.docApi.fetchTable(PERMISSIONS_TABLE);
+    if (data && data.id && data.Email) {
+      var email = currentUserEmail.toLowerCase().trim();
+      for (var i = 0; i < data.id.length; i++) {
+        var rowEmail = (data.Email[i] || '').toLowerCase().trim();
+        if (rowEmail === email) {
+          var tabs = (data.AllowedTabs[i] || '').split(',').map(function(t) { return t.trim().toLowerCase(); }).filter(function(t) { return t; });
+          userAllowedTabs = tabs;
+          console.log('Permissions for ' + email + ':', userAllowedTabs);
+          break;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Could not load permissions:', e.message);
+  }
 }
