@@ -455,10 +455,10 @@ function movementBadge(mouvement) {
 // =============================================================================
 
 function isTabAllowed(tabId) {
+  // If user has custom permissions from BM_Permissions, those always take priority
+  if (userAllowedTabs.length > 0) return userAllowedTabs.indexOf(tabId) !== -1;
   // Owners always have access to everything
   if (isOwner) return true;
-  // If user has custom permissions from BM_Permissions, use those
-  if (userAllowedTabs.length > 0) return userAllowedTabs.indexOf(tabId) !== -1;
   // Fallback to role-based: editors see search + gestion, viewers see search only
   if (tabId === 'search') return true;
   if (tabId === 'gestion') return canManage;
