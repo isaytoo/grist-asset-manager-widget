@@ -3323,7 +3323,6 @@ if (!isInsideGrist()) {
         console.log('Fallback: user can write → treating as Owner');
       } catch (e) {
         isOwner = false; isEditor = false;
-        console.log('Fallback: user cannot write → Viewer');
       }
     }
     console.log('Final: isOwner:', isOwner, 'isEditor:', isEditor);
