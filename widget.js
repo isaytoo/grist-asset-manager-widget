@@ -1799,8 +1799,8 @@ function contrastTextColor(hexColor) {
   return lum > 0.55 ? '#1e293b' : '#fff';
 }
 
-function buildPieChart(slices, size) {
-  // slices = [{value, color, label}], size = diameter in px
+function buildPieChart(slices, size, unit) {
+  // slices = [{value, color, label}], size = diameter in px, unit = 'm²' or 'count'
   var total = 0;
   for (var i = 0; i < slices.length; i++) total += Math.abs(slices[i].value);
   if (total === 0) return '<div style="width:' + size + 'px;height:' + size + 'px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:13px;">Aucune donnée</div>';
@@ -1842,7 +1842,7 @@ function buildPieChart(slices, size) {
     var labelR = (r - 4) * 0.55;
     var lx = cx + labelR * Math.cos(labelData[j].midAngle);
     var ly = cy + labelR * Math.sin(labelData[j].midAngle);
-    var labelVal = Math.round(Math.abs(labelData[j].value)).toLocaleString('fr-FR') + ' m²';
+    var labelVal = Math.round(Math.abs(labelData[j].value)).toLocaleString('fr-FR') + (unit === 'count' ? '' : ' m²');
     var textW = labelVal.length * fontSize * 0.6;
     var textH = fontSize + 8;
     svg += '<rect x="' + (lx - textW/2 - 6) + '" y="' + (ly - textH/2) + '" width="' + (textW + 12) + '" height="' + textH + '" rx="4" fill="rgba(255,255,255,0.9)" />';
@@ -2236,7 +2236,7 @@ function renderDashboardView() {
     { value: noSpiAcq, color: '#86efac', label: 'Pas de Gestion SPI - Tous mouvements sauf Cession' },
     { value: spiCes, color: '#4d7c0f', label: 'Gestion SPI - Cession' },
     { value: noSpiCes, color: '#d9f99d', label: 'Pas de Gestion SPI - Cession' }
-  ], 220);
+  ], 220, 'count');
   html += '</div>';
 
   // RIGHT: Évolution SPI line chart
