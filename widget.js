@@ -3,15 +3,23 @@
 // =============================================================================
 
 var BIENS_TABLE = 'BM_Biens';
-var GESTIONNAIRES_TABLE = 'BM_Gestionnaires';
 var PERMISSIONS_TABLE = 'BM_Permissions';
+
+// Available tabs (for the permissions editor)
+var AVAILABLE_TABS = [
+  { id: 'search',        key: 'tabSearch' },
+  { id: 'gestion',       key: 'tabGestion' },
+  { id: 'dashboard',     key: 'tabDashboard' },
+  { id: 'import',        key: 'tabImport' },
+  { id: 'gestionnaires', key: 'tabGestionnaires' }
+];
 
 // State
 var biens = [];
-var gestionnaires = [];
+var allPermissions = []; // All rows from BM_Permissions (for admin editor)
 var isOwner = false;
 var isEditor = false;
-var canManage = false; // Owner OR designated gestionnaire
+var canManage = false; // Can write biens (Owner OR gestion permission OR Editor fallback)
 var currentLang = 'fr';
 var currentUserEmail = '';
 var userAllowedTabs = []; // Tabs allowed for current user based on BM_Permissions
@@ -66,7 +74,7 @@ var i18n = {
     tabSearch: 'Recherche',
     tabGestion: 'Gestion des Biens',
     tabDashboard: 'Tableau de Bord',
-    tabGestionnaires: 'Gestionnaires',
+    tabGestionnaires: 'Droits d\'accès',
     searchTitle: 'Recherche Multicritères',
     searchSubtitle: 'Trouvez instantanément vos biens avec des filtres avancés',
     searchBtn: 'Rechercher',
@@ -142,13 +150,19 @@ var i18n = {
     dashDetailTab: 'Détails des surfaces par bien',
     dashExportExcel: 'Exporter Excel (4 onglets)',
     dashExportDone: 'Export Excel téléchargé avec succès',
-    gestTitle: 'Gestion des Gestionnaires',
-    gestSubtitle: 'Désignez les personnes autorisées à gérer les biens (en plus du Owner)',
-    gestEmail: 'Email du gestionnaire',
-    gestAdd: 'Ajouter',
-    gestEmpty: 'Aucun gestionnaire désigné. Seul le Owner peut gérer les biens.',
-    gestAdded: 'Gestionnaire ajouté',
-    gestRemoved: 'Gestionnaire retiré',
+    permTitle: 'Gestion des Droits d\'Accès',
+    permSubtitle: 'Pour chaque utilisateur, cochez les onglets auxquels il aura accès. Cocher « Gestion des Biens » donne aussi le droit d\'écriture (ajouter / modifier / supprimer).',
+    permEmailPlaceholder: 'Email de l\'utilisateur',
+    permAdd: 'Ajouter',
+    permEmail: 'Email',
+    permEmpty: 'Aucun utilisateur configuré. Les utilisateurs non listés suivent leur rôle Grist (Owner = tout, Editor = recherche + gestion, Viewer = recherche seule).',
+    permAdded: 'Utilisateur ajouté',
+    permRemoved: 'Utilisateur retiré',
+    permDuplicate: 'Cet email existe déjà dans la liste',
+    permRemove: 'Retirer',
+    permLoading: 'Chargement des droits d\'accès...',
+    permYou: 'vous',
+    permHint: 'Les utilisateurs absents de ce tableau suivent leur rôle Grist par défaut. Les Owners ont toujours tous les droits.',
     accessDenied: "Vous n'avez pas les droits pour effectuer cette action",
     ownerOnly: 'Réservé au Owner',
     tabImport: 'Import Excel',
@@ -183,7 +197,7 @@ var i18n = {
     tabSearch: 'Search',
     tabGestion: 'Asset Management',
     tabDashboard: 'Dashboard',
-    tabGestionnaires: 'Managers',
+    tabGestionnaires: 'Access Rights',
     searchTitle: 'Multi-criteria Search',
     searchSubtitle: 'Find your assets instantly with advanced filters',
     searchBtn: 'Search',
@@ -259,13 +273,19 @@ var i18n = {
     dashDetailTab: 'Surface details by asset',
     dashExportExcel: 'Export Excel (4 tabs)',
     dashExportDone: 'Excel export downloaded successfully',
-    gestTitle: 'Manager Management',
-    gestSubtitle: 'Designate people authorized to manage assets (in addition to Owner)',
-    gestEmail: 'Manager email',
-    gestAdd: 'Add',
-    gestEmpty: 'No designated managers. Only the Owner can manage assets.',
-    gestAdded: 'Manager added',
-    gestRemoved: 'Manager removed',
+    permTitle: 'Access Rights Management',
+    permSubtitle: 'For each user, tick the tabs they can access. Ticking “Asset Management” also grants write access (add / edit / delete).',
+    permEmailPlaceholder: 'User email',
+    permAdd: 'Add',
+    permEmail: 'Email',
+    permEmpty: 'No users configured. Users not listed follow their Grist role (Owner = all, Editor = search + management, Viewer = search only).',
+    permAdded: 'User added',
+    permRemoved: 'User removed',
+    permDuplicate: 'This email already exists in the list',
+    permRemove: 'Remove',
+    permLoading: 'Loading access rights...',
+    permYou: 'you',
+    permHint: 'Users not listed here follow their default Grist role. Owners always have full access.',
     accessDenied: 'You do not have permission to perform this action',
     ownerOnly: 'Owner only',
     tabImport: 'Import Excel',
@@ -2968,44 +2988,160 @@ function updateImportProgress(done, total) {
 }
 
 // =============================================================================
-// GESTIONNAIRES VIEW
+// PERMISSIONS VIEW (edits BM_Permissions — only Owner)
 // =============================================================================
 
+async function loadAllPermissions() {
+  allPermissions = [];
+  try {
+    var data = await grist.docApi.fetchTable(PERMISSIONS_TABLE);
+    if (data && data.id) {
+      for (var i = 0; i < data.id.length; i++) {
+        allPermissions.push({
+          id: data.id[i],
+          Email: (data.Email && data.Email[i]) || '',
+          AllowedTabs: (data.AllowedTabs && data.AllowedTabs[i]) || ''
+        });
+      }
+    }
+  } catch (e) {
+    console.error('Error loading permissions:', e);
+  }
+}
+
 function renderGestionnairesView() {
-  var html = '<div class="section-card">';
-  html += '<h3>👥 ' + t('gestTitle') + '</h3>';
-  html += '<p style="color:#64748b;margin-bottom:16px;">' + t('gestSubtitle') + '</p>';
+  var container = document.getElementById('gestionnaires-view');
+  if (!container) return;
 
   if (!isOwner) {
-    html += '<p style="color:#94a3b8;font-style:italic;">🔒 ' + t('ownerOnly') + '</p>';
-  } else {
-    // Add gestionnaire
-    html += '<div class="gestionnaire-add">';
-    html += '<input type="text" id="gest-email" placeholder="' + t('gestEmail') + '" />';
-    html += '<button class="btn btn-primary btn-sm" onclick="addGestionnaire()">➕ ' + t('gestAdd') + '</button>';
-    html += '</div>';
+    container.innerHTML = '<div class="section-card"><h3>🔐 ' + t('permTitle') + '</h3>' +
+      '<p style="color:#94a3b8;font-style:italic;">🔒 ' + t('ownerOnly') + '</p></div>';
+    updateOwnerTabs();
+    return;
   }
 
-  // List
-  html += '<div class="gestionnaire-list" id="gest-list">';
-  if (gestionnaires.length === 0) {
-    html += '<p style="color:#94a3b8;font-size:12px;margin-top:10px;">' + t('gestEmpty') + '</p>';
-  } else {
-    for (var i = 0; i < gestionnaires.length; i++) {
-      var g = gestionnaires[i];
-      html += '<span class="gestionnaire-chip">' + sanitize(g.Email);
-      if (isOwner) html += ' <span class="chip-remove" onclick="removeGestionnaire(' + g.id + ')">✕</span>';
-      html += '</span>';
-    }
-  }
+  // Show a loading shell then fetch + re-render
+  container.innerHTML = '<div class="section-card"><h3>🔐 ' + t('permTitle') + '</h3>' +
+    '<p style="color:#94a3b8;">⏳ ' + t('permLoading') + '</p></div>';
+  loadAllPermissions().then(function() { _renderPermissionsEditor(); });
+}
+
+function _renderPermissionsEditor() {
+  var html = '<div class="section-card">';
+  html += '<h3>🔐 ' + t('permTitle') + '</h3>';
+  html += '<p style="color:#64748b;margin-bottom:16px;">' + t('permSubtitle') + '</p>';
+
+  // Add new email
+  html += '<div class="gestionnaire-add">';
+  html += '<input type="text" id="perm-new-email" placeholder="' + t('permEmailPlaceholder') + '" />';
+  html += '<button class="btn btn-primary btn-sm" onclick="addPermissionRow()">➕ ' + t('permAdd') + '</button>';
   html += '</div>';
 
+  // Table
+  html += '<div class="perm-table-wrap" style="margin-top:16px;overflow-x:auto;">';
+  html += '<table class="perm-table"><thead><tr>';
+  html += '<th style="text-align:left;">' + t('permEmail') + '</th>';
+  for (var i = 0; i < AVAILABLE_TABS.length; i++) {
+    html += '<th>' + sanitize(t(AVAILABLE_TABS[i].key)) + '</th>';
+  }
+  html += '<th></th></tr></thead><tbody>';
+
+  if (allPermissions.length === 0) {
+    html += '<tr><td colspan="' + (AVAILABLE_TABS.length + 2) + '" style="text-align:center;color:#94a3b8;padding:20px;">' + t('permEmpty') + '</td></tr>';
+  } else {
+    for (var r = 0; r < allPermissions.length; r++) {
+      var p = allPermissions[r];
+      var allowed = (p.AllowedTabs || '').toLowerCase().split(',').map(function(x){ return x.trim(); });
+      var isSelf = (p.Email || '').toLowerCase().trim() === (currentUserEmail || '').toLowerCase().trim();
+      html += '<tr>';
+      html += '<td>' + sanitize(p.Email) + (isSelf ? ' <span style="color:#10b981;font-size:10px;">(' + t('permYou') + ')</span>' : '') + '</td>';
+      for (var k = 0; k < AVAILABLE_TABS.length; k++) {
+        var tabId = AVAILABLE_TABS[k].id;
+        var checked = allowed.indexOf(tabId) !== -1 ? 'checked' : '';
+        html += '<td style="text-align:center;"><input type="checkbox" ' + checked +
+          ' onchange="togglePermission(' + p.id + ', \'' + tabId + '\', this.checked)" /></td>';
+      }
+      html += '<td style="text-align:center;"><span class="chip-remove" style="cursor:pointer;color:#ef4444;font-weight:800;" onclick="removePermissionRow(' + p.id + ')" title="' + t('permRemove') + '">✕</span></td>';
+      html += '</tr>';
+    }
+  }
+  html += '</tbody></table></div>';
+
+  html += '<p style="color:#94a3b8;font-size:11px;margin-top:12px;">ℹ️ ' + t('permHint') + '</p>';
   html += '</div>';
 
   document.getElementById('gestionnaires-view').innerHTML = html;
-
-  // Hide tabs for non-owners
   updateOwnerTabs();
+}
+
+async function addPermissionRow() {
+  if (!isOwner) return;
+  var input = document.getElementById('perm-new-email');
+  var email = (input && input.value || '').trim();
+  if (!email) return;
+  // Check duplicate
+  for (var i = 0; i < allPermissions.length; i++) {
+    if ((allPermissions[i].Email || '').toLowerCase().trim() === email.toLowerCase()) {
+      showToast(t('permDuplicate'), 'error');
+      return;
+    }
+  }
+  try {
+    await grist.docApi.applyUserActions([
+      ['AddRecord', PERMISSIONS_TABLE, null, { Email: email, AllowedTabs: 'search' }]
+    ]);
+    showToast(t('permAdded'), 'success');
+    await loadAllPermissions();
+    _renderPermissionsEditor();
+  } catch (e) {
+    console.error('Error adding permission:', e);
+    showToast('Erreur: ' + e.message, 'error');
+  }
+}
+
+async function removePermissionRow(pid) {
+  if (!isOwner) return;
+  try {
+    await grist.docApi.applyUserActions([
+      ['RemoveRecord', PERMISSIONS_TABLE, pid]
+    ]);
+    showToast(t('permRemoved'), 'success');
+    await loadAllPermissions();
+    _renderPermissionsEditor();
+  } catch (e) {
+    console.error('Error removing permission:', e);
+    showToast('Erreur: ' + e.message, 'error');
+  }
+}
+
+async function togglePermission(pid, tabId, checked) {
+  if (!isOwner) return;
+  var p = null;
+  for (var i = 0; i < allPermissions.length; i++) {
+    if (allPermissions[i].id === pid) { p = allPermissions[i]; break; }
+  }
+  if (!p) return;
+  var tabs = (p.AllowedTabs || '').toLowerCase().split(',').map(function(x){ return x.trim(); }).filter(Boolean);
+  var idx = tabs.indexOf(tabId);
+  if (checked && idx === -1) tabs.push(tabId);
+  if (!checked && idx !== -1) tabs.splice(idx, 1);
+  var newVal = tabs.join(',');
+  try {
+    await grist.docApi.applyUserActions([
+      ['UpdateRecord', PERMISSIONS_TABLE, pid, { AllowedTabs: newVal }]
+    ]);
+    p.AllowedTabs = newVal;
+    // If the edited row is for the current user, refresh live UI
+    if ((p.Email || '').toLowerCase().trim() === (currentUserEmail || '').toLowerCase().trim()) {
+      userAllowedTabs = tabs.slice();
+      updateCanManage();
+      updateOwnerTabs();
+      document.getElementById('fab-add').style.display = canManage ? '' : 'none';
+    }
+  } catch (e) {
+    console.error('Error updating permission:', e);
+    showToast('Erreur: ' + e.message, 'error');
+  }
 }
 
 // =============================================================================
@@ -3062,40 +3198,6 @@ async function confirmDeleteBien(bienId) {
   }
 }
 
-async function addGestionnaire() {
-  if (!isOwner) return;
-  var email = document.getElementById('gest-email').value.trim();
-  if (!email) return;
-
-  // Check duplicate
-  for (var i = 0; i < gestionnaires.length; i++) {
-    if (gestionnaires[i].Email.toLowerCase() === email.toLowerCase()) return;
-  }
-
-  try {
-    await grist.docApi.applyUserActions([
-      ['AddRecord', GESTIONNAIRES_TABLE, null, { Email: email }]
-    ]);
-    showToast(t('gestAdded'), 'success');
-    await loadAllData();
-  } catch (e) {
-    console.error('Error adding gestionnaire:', e);
-  }
-}
-
-async function removeGestionnaire(gId) {
-  if (!isOwner) return;
-  try {
-    await grist.docApi.applyUserActions([
-      ['RemoveRecord', GESTIONNAIRES_TABLE, gId]
-    ]);
-    showToast(t('gestRemoved'), 'success');
-    await loadAllData();
-  } catch (e) {
-    console.error('Error removing gestionnaire:', e);
-  }
-}
-
 // =============================================================================
 // DATA LOADING
 // =============================================================================
@@ -3115,13 +3217,6 @@ async function ensureTables() {
       ]);
     }
 
-    if (tables.indexOf(GESTIONNAIRES_TABLE) === -1) {
-      await grist.docApi.applyUserActions([
-        ['AddTable', GESTIONNAIRES_TABLE, [
-          { id: 'Email', fields: { type: 'Text', label: 'Email' } }
-        ]]
-      ]);
-    }
   } catch (e) {
     console.error('Error ensuring tables:', e);
   }
@@ -3145,21 +3240,7 @@ async function loadAllData() {
     console.error('Error loading biens:', e);
   }
 
-  if (canManage) {
-    try {
-      var gestData = await grist.docApi.fetchTable(GESTIONNAIRES_TABLE);
-      gestionnaires = [];
-      if (gestData && gestData.id) {
-        for (var i = 0; i < gestData.id.length; i++) {
-          gestionnaires.push({ id: gestData.id[i], Email: gestData.Email ? gestData.Email[i] : '' });
-        }
-      }
-    } catch (e) {
-      console.error('Error loading gestionnaires:', e);
-    }
-  }
-
-  // Update canManage based on gestionnaires
+  // Update canManage based on current permissions + role
   updateCanManage();
 
   // Show/hide FAB
@@ -3169,8 +3250,15 @@ async function loadAllData() {
 }
 
 function updateCanManage() {
-  // Owner and Editor can manage biens
-  canManage = isOwner || isEditor;
+  // Priority 1: Owners always manage
+  if (isOwner) { canManage = true; return; }
+  // Priority 2: explicit BM_Permissions row → follow it strictly
+  if (userAllowedTabs.length > 0) {
+    canManage = userAllowedTabs.indexOf('gestion') !== -1;
+    return;
+  }
+  // Priority 3: fallback role-based (Editor can manage if no explicit rule)
+  canManage = isEditor;
 }
 
 // =============================================================================
