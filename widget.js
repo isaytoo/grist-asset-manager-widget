@@ -3229,6 +3229,7 @@ if (!isInsideGrist()) {
     // The widget token via grist.docApi always has Owner privileges,
     // but the access token from getAccessToken respects "View As".
     currentUserEmail = '';
+    var helperWriteSucceeded = false; // Tracks whether the user could actually write data
     try {
       // Try to refresh: delete old rows + insert fresh one
       try {
@@ -3240,6 +3241,7 @@ if (!isInsideGrist()) {
         }
         actions.push(['AddRecord', USER_INFO_TABLE, null, {}]);
         await grist.docApi.applyUserActions(actions);
+        helperWriteSucceeded = true;
         console.log('Refreshed helper table row');
       } catch (writeErr) {
         console.log('Could not refresh row (read-only?):', writeErr.message);
@@ -3298,14 +3300,13 @@ if (!isInsideGrist()) {
       } catch (structErr) {
         if (structErr.message && (structErr.message.indexOf('ACL_DENY') !== -1 || structErr.message.indexOf('Blocked by') !== -1 || structErr.message.indexOf('structure access') !== -1)) {
           // Structure modification blocked → not Owner
-          // Can they write data?
-          try {
-            // We already know they can write (they refreshed the helper row above)
-            // But let's verify with a simple test
-            await grist.docApi.applyUserActions([]);
+          // Editor vs Viewer: rely on the real data-write attempt done in Step 2
+          // (helperWriteSucceeded). An empty applyUserActions([]) would always pass
+          // server-side and cannot distinguish Editor from Viewer.
+          if (helperWriteSucceeded) {
             isOwner = false; isEditor = true; roleDetected = true;
             console.log('Structure blocked but data write OK → Editor');
-          } catch (writeErr) {
+          } else {
             isOwner = false; isEditor = false; roleDetected = true;
             console.log('Structure blocked and data write blocked → Viewer');
           }
@@ -3315,14 +3316,17 @@ if (!isInsideGrist()) {
       }
     }
 
-    // Fallback if role not detected
+    // Fallback if role not detected (email missing, unexpected error, etc.)
+    // SECURITY: default to the LEAST privileged role, never to Owner.
     if (!roleDetected) {
-      try {
-        await grist.docApi.applyUserActions([]);
-        isOwner = true; isEditor = false;
-        console.log('Fallback: user can write → treating as Owner');
-      } catch (e) {
+      if (helperWriteSucceeded) {
+        // We could write data but couldn't confirm structure access → assume Editor
+        isOwner = false; isEditor = true;
+        console.warn('Fallback: data write OK but structure test inconclusive → treating as Editor');
+      } else {
+        // No write, no email → safest default
         isOwner = false; isEditor = false;
+        console.warn('Fallback: role detection failed → treating as Viewer (safest default)');
       }
     }
     console.log('Final: isOwner:', isOwner, 'isEditor:', isEditor);
