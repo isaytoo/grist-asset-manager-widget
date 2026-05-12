@@ -3460,6 +3460,12 @@ async function ensurePermissionsTable() {
 
 async function loadUserPermissions() {
   userAllowedTabs = [];
+  // Viewers cannot write BM_UserInfo, so currentUserEmail may be stale (written by owner).
+  // Never trust the email for permission lookup if the user is read-only.
+  if (!isOwner && !isEditor) {
+    console.log('Viewer: skipping BM_Permissions email lookup (email may be stale)');
+    return;
+  }
   try {
     var data = await grist.docApi.fetchTable(PERMISSIONS_TABLE);
     if (data && data.id && data.Email) {
