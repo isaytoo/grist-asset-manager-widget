@@ -566,10 +566,13 @@ function renderSearchView() {
   html += '<button class="search-sub-tab' + (searchSubTab === 'ia' ? ' active' : '') + '" onclick="setSearchSubTab(\'ia\')">🤖 Recherche Intelligente (IA)</button>';
   html += '<button class="search-sub-tab' + (searchSubTab === 'geo' ? ' active' : '') + '" onclick="setSearchSubTab(\'geo\')">📍 Recherche Géographique</button>';
   html += '<button class="search-sub-tab' + (searchSubTab === 'rapport' ? ' active' : '') + '" onclick="setSearchSubTab(\'rapport\')">📄 Rapport</button>';
+  html += '<button class="search-sub-tab' + (searchSubTab === 'tableau' ? ' active' : '') + '" onclick="setSearchSubTab(\'tableau\')">📋 Vue Tableau</button>';
   html += '</div>';
 
   if (searchSubTab === 'classique') {
     html += renderClassicSearch();
+  } else if (searchSubTab === 'tableau') {
+    html += renderTableauSearch();
   } else if (searchSubTab === 'ia') {
     html += '<div style="text-align:center;padding:60px 20px;color:#94a3b8;">';
     html += '<div style="font-size:48px;margin-bottom:12px;">🤖</div>';
@@ -588,14 +591,17 @@ function renderSearchView() {
 
   html += '</div>';
 
-  // Results (only for classic search)
+  // Results for classic and tableau
   if (searchSubTab === 'classique') {
     html += '<div id="search-results"></div>';
+  } else if (searchSubTab === 'tableau') {
+    html += '<div id="tableau-results"></div>';
   }
 
   document.getElementById('search-view').innerHTML = html;
 
   if (searchSubTab === 'classique') doSearch();
+  else if (searchSubTab === 'tableau') doTableauSearch();
 }
 
 function renderClassicSearch() {
@@ -1061,6 +1067,235 @@ function resetSearch() {
   sortCol = '';
   sortDir = 'asc';
   doSearch();
+}
+
+// =============================================================================
+// VUE TABLEAU (grille style Excel avec filtres + export)
+// =============================================================================
+
+var tableauResults = [];
+var tableauSortCol = '';
+var tableauSortDir = 'asc';
+var tableauPage = 1;
+var tableauPageSize = 50;
+
+function renderTableauSearch() {
+  var communes = getUniqueValues('Commune');
+  var mouvements = getUniqueValues('Mouvement');
+  var types = getUniqueValues('Type_Bien');
+  var annees = getUniqueValues('Annee').sort(function(a, b) { return b - a; });
+
+  var html = '<div class="search-grid">';
+  html += '<div class="search-field"><label>Référence DDC</label><input type="text" id="t-ref" placeholder="Ex: ECH 69389 22 00001" oninput="doTableauSearch()" /></div>';
+  html += '<div class="search-field"><label>Commune</label><select id="t-commune" onchange="doTableauSearch()"><option value="">' + t('allCommunes') + '</option>';
+  for (var i = 0; i < communes.length; i++) html += '<option value="' + sanitize(communes[i]) + '">' + sanitize(communes[i]) + '</option>';
+  html += '</select></div>';
+  html += '<div class="search-field"><label>Mouvement</label><select id="t-mouvement" onchange="doTableauSearch()"><option value="">' + t('allMovements') + '</option>';
+  for (var i = 0; i < mouvements.length; i++) html += '<option value="' + sanitize(mouvements[i]) + '">' + sanitize(mouvements[i]) + '</option>';
+  html += '</select></div>';
+  html += '<div class="search-field"><label>Adresse</label><input type="text" id="t-adresse" placeholder="Ex: LA JACQUIERE" oninput="doTableauSearch()" /></div>';
+  html += '<div class="search-field"><label>Réf. Parcelle</label><input type="text" id="t-parcelle" oninput="doTableauSearch()" /></div>';
+  html += '<div class="search-field"><label>Type de Bien</label><select id="t-type" onchange="doTableauSearch()"><option value="">' + t('allTypes') + '</option>';
+  for (var i = 0; i < types.length; i++) html += '<option value="' + sanitize(types[i]) + '">' + sanitize(types[i]) + '</option>';
+  html += '</select></div>';
+  html += '<div class="search-field"><label>Année</label><select id="t-annee" onchange="doTableauSearch()"><option value="">' + t('allYears') + '</option>';
+  for (var i = 0; i < annees.length; i++) html += '<option value="' + sanitize(annees[i]) + '">' + sanitize(annees[i]) + '</option>';
+  html += '</select></div>';
+  html += '<div class="search-field"><label>N° Site</label><input type="text" id="t-site" oninput="doTableauSearch()" /></div>';
+  html += '</div>';
+
+  html += '<div class="search-actions">';
+  html += '<button class="btn btn-secondary" onclick="resetTableauSearch()">🔄 ' + t('resetBtn') + '</button>';
+  html += '<button class="btn btn-danger" onclick="exportTableauExcel()" style="margin-left:8px;">📊 Exporter Excel</button>';
+  html += '</div>';
+  return html;
+}
+
+function doTableauSearch() {
+  var ref = (document.getElementById('t-ref') ? document.getElementById('t-ref').value : '').trim().toLowerCase();
+  var commune = (document.getElementById('t-commune') ? document.getElementById('t-commune').value : '');
+  var mouvement = (document.getElementById('t-mouvement') ? document.getElementById('t-mouvement').value : '');
+  var adresse = (document.getElementById('t-adresse') ? document.getElementById('t-adresse').value : '').trim().toLowerCase();
+  var parcelle = (document.getElementById('t-parcelle') ? document.getElementById('t-parcelle').value : '').trim().toLowerCase();
+  var type = (document.getElementById('t-type') ? document.getElementById('t-type').value : '');
+  var annee = (document.getElementById('t-annee') ? document.getElementById('t-annee').value : '');
+  var site = (document.getElementById('t-site') ? document.getElementById('t-site').value : '').trim().toLowerCase();
+
+  tableauResults = biens.filter(function(b) {
+    if (ref && String(b.Reference_DDC || '').toLowerCase().indexOf(ref) === -1) return false;
+    if (commune && standardiserCommune(b.Commune) !== commune) return false;
+    if (mouvement && standardiserMouvement(b.Mouvement) !== mouvement) return false;
+    if (adresse && String(b.Adresse || '').toLowerCase().indexOf(adresse) === -1) return false;
+    if (parcelle && String(b.Ref_Parcelles || '').toLowerCase().indexOf(parcelle) === -1) return false;
+    if (type && standardiserTypeBien(b.Type_Bien) !== type) return false;
+    if (annee && String(b.Annee) !== annee) return false;
+    if (site && String(b.Num_Site || '').toLowerCase().indexOf(site) === -1) return false;
+    return true;
+  });
+
+  if (tableauSortCol) {
+    tableauResults.sort(function(a, b) {
+      var va = String(a[tableauSortCol] || '').toLowerCase();
+      var vb = String(b[tableauSortCol] || '').toLowerCase();
+      if (va < vb) return tableauSortDir === 'asc' ? -1 : 1;
+      if (va > vb) return tableauSortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
+
+  tableauPage = 1;
+  renderTableauResults();
+}
+
+function resetTableauSearch() {
+  var ids = ['t-ref', 't-commune', 't-mouvement', 't-adresse', 't-parcelle', 't-type', 't-annee', 't-site'];
+  for (var i = 0; i < ids.length; i++) {
+    var el = document.getElementById(ids[i]);
+    if (el) el.value = '';
+  }
+  tableauSortCol = '';
+  tableauSortDir = 'asc';
+  doTableauSearch();
+}
+
+function sortTableau(col) {
+  if (tableauSortCol === col) {
+    tableauSortDir = tableauSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    tableauSortCol = col;
+    tableauSortDir = 'asc';
+  }
+  doTableauSearch();
+}
+
+function tableauGoToPage(p) {
+  tableauPage = p;
+  renderTableauResults();
+}
+
+function renderTableauResults() {
+  var container = document.getElementById('tableau-results');
+  if (!container) return;
+
+  var total = tableauResults.length;
+  var totalPages = Math.max(1, Math.ceil(total / tableauPageSize));
+  if (tableauPage > totalPages) tableauPage = totalPages;
+  var start = (tableauPage - 1) * tableauPageSize;
+  var pageData = tableauResults.slice(start, start + tableauPageSize);
+
+  var cols = BIEN_COLUMNS;
+
+  var html = '<div class="tableau-excel-wrapper">';
+
+  // Info bar
+  html += '<div class="tableau-info-bar">';
+  html += '<span><strong>' + total + '</strong> ligne(s) — page <strong>' + tableauPage + '</strong>/' + totalPages + '</span>';
+  html += '<span style="color:#64748b;font-size:12px;">Cliquez sur un en-tête pour trier</span>';
+  html += '</div>';
+
+  // Table
+  html += '<div class="tableau-scroll">';
+  html += '<table class="tableau-excel">';
+
+  // Header
+  html += '<thead><tr><th style="width:40px;text-align:center;">#</th>';
+  for (var c = 0; c < cols.length; c++) {
+    var col = cols[c];
+    var arrow = tableauSortCol === col.id ? (tableauSortDir === 'asc' ? ' ▲' : ' ▼') : '';
+    html += '<th onclick="sortTableau(\'' + col.id + '\')" title="Trier par ' + (currentLang === 'fr' ? col.label_fr : col.label_en) + '">';
+    html += (currentLang === 'fr' ? col.label_fr : col.label_en) + arrow;
+    html += '</th>';
+  }
+  html += '</tr></thead>';
+
+  // Body
+  html += '<tbody>';
+  if (pageData.length === 0) {
+    html += '<tr><td colspan="' + (cols.length + 1) + '" style="text-align:center;padding:32px;color:#94a3b8;">Aucun résultat</td></tr>';
+  }
+  for (var i = 0; i < pageData.length; i++) {
+    var b = pageData[i];
+    var rowNum = start + i + 1;
+    var isEven = i % 2 === 1;
+    html += '<tr class="' + (isEven ? 'tableau-row-even' : '') + '">';
+    html += '<td style="text-align:center;color:#94a3b8;font-size:11px;">' + rowNum + '</td>';
+    for (var c = 0; c < cols.length; c++) {
+      var val = b[cols[c].id];
+      if (cols[c].id === 'Date_Acte' || cols[c].id === 'Date_Integration_GIMA') {
+        var d = parseDateFR(val);
+        val = d ? formatDateFR(d) : (val != null ? String(val) : '');
+      } else if (cols[c].id === 'Mouvement') {
+        val = '<span style="white-space:nowrap;">' + formatMouvement(val != null ? String(val) : '') + '</span>';
+      } else {
+        val = val != null ? sanitize(String(val)) : '';
+      }
+      html += '<td>' + val + '</td>';
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  html += '</div>';
+
+  // Pagination
+  if (totalPages > 1) {
+    html += '<div class="tableau-pagination">';
+    html += '<button class="tableau-page-btn" onclick="tableauGoToPage(1)" ' + (tableauPage === 1 ? 'disabled' : '') + '>«</button>';
+    html += '<button class="tableau-page-btn" onclick="tableauGoToPage(' + (tableauPage - 1) + ')" ' + (tableauPage === 1 ? 'disabled' : '') + '>‹</button>';
+    var startP = Math.max(1, tableauPage - 3);
+    var endP = Math.min(totalPages, tableauPage + 3);
+    for (var p = startP; p <= endP; p++) {
+      html += '<button class="tableau-page-btn ' + (p === tableauPage ? 'active' : '') + '" onclick="tableauGoToPage(' + p + ')">' + p + '</button>';
+    }
+    html += '<button class="tableau-page-btn" onclick="tableauGoToPage(' + (tableauPage + 1) + ')" ' + (tableauPage === totalPages ? 'disabled' : '') + '>›</button>';
+    html += '<button class="tableau-page-btn" onclick="tableauGoToPage(' + totalPages + ')" ' + (tableauPage === totalPages ? 'disabled' : '') + '>»</button>';
+    html += '</div>';
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function exportTableauExcel() {
+  if (tableauResults.length === 0) {
+    showToast('Aucun résultat à exporter', 'error');
+    return;
+  }
+  var headers = [];
+  var fields = [];
+  for (var c = 0; c < BIEN_COLUMNS.length; c++) {
+    headers.push(currentLang === 'fr' ? BIEN_COLUMNS[c].label_fr : BIEN_COLUMNS[c].label_en);
+    fields.push(BIEN_COLUMNS[c].id);
+  }
+  var rows = [headers];
+  for (var i = 0; i < tableauResults.length; i++) {
+    var row = [];
+    for (var f = 0; f < fields.length; f++) {
+      var val = tableauResults[i][fields[f]];
+      if (fields[f] === 'Date_Acte' || fields[f] === 'Date_Integration_GIMA') {
+        var d = parseDateFR(val);
+        val = d ? formatDateFR(d) : (val || '');
+      } else {
+        val = val != null ? String(val) : '';
+      }
+      row.push(val);
+    }
+    rows.push(row);
+  }
+  var csv = rows.map(function(r) {
+    return r.map(function(cell) {
+      var s = String(cell).replace(/"/g, '""');
+      return '"' + s + '"';
+    }).join(';');
+  }).join('\r\n');
+  var bom = '\uFEFF';
+  var blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'vue_tableau_' + new Date().toISOString().slice(0, 10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast(tableauResults.length + ' lignes exportées', 'success');
 }
 
 function exportSearchExcel() {

@@ -273,6 +273,24 @@
     .search-sub-tab:last-child { border-right: none; }
     .search-sub-tab:hover { color: #ef4444; background: #fff; }
     .search-sub-tab.active { background: #fff; color: #ef4444; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    /* ========== TABLEAU EXCEL ========== */
+    .tableau-excel-wrapper { margin-top: 16px; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background: #fff; }
+    .tableau-info-bar { display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; font-size: 13px; color: #475569; }
+    .tableau-scroll { overflow-x: auto; max-height: 520px; overflow-y: auto; }
+    .tableau-excel { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .tableau-excel thead { position: sticky; top: 0; z-index: 2; }
+    .tableau-excel thead th { background: #1e293b; color: #fff; padding: 8px 10px; text-align: left; white-space: nowrap; cursor: pointer; user-select: none; border-right: 1px solid #334155; font-size: 11px; font-weight: 700; }
+    .tableau-excel thead th:first-child { background: #0f172a; cursor: default; }
+    .tableau-excel thead th:hover { background: #334155; }
+    .tableau-excel tbody tr { border-bottom: 1px solid #f1f5f9; transition: background .1s; }
+    .tableau-excel tbody tr:hover { background: #fef2f2 !important; }
+    .tableau-excel tbody td { padding: 6px 10px; white-space: nowrap; color: #374151; border-right: 1px solid #f1f5f9; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+    .tableau-row-even { background: #f8fafc; }
+    .tableau-pagination { display: flex; justify-content: center; align-items: center; gap: 4px; padding: 10px; border-top: 1px solid #e2e8f0; background: #f8fafc; flex-wrap: wrap; }
+    .tableau-page-btn { padding: 4px 10px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; color: #475569; font-size: 12px; cursor: pointer; transition: all .15s; }
+    .tableau-page-btn:hover:not(:disabled) { background: #ef4444; color: #fff; border-color: #ef4444; }
+    .tableau-page-btn.active { background: #ef4444; color: #fff; border-color: #ef4444; font-weight: 700; }
+    .tableau-page-btn:disabled { opacity: .4; cursor: default; }
     .rapport-form { max-width: 700px; margin: 0 auto; }
     .rapport-dates { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
     .rapport-dates label { display: block; font-size: 11px; font-weight: 600; color: #64748b; margin-bottom: 4px; }
@@ -399,7 +417,7 @@
   <!-- FAB -->
   <button class="fab" id="fab-add" onclick="openAddModal()" title="Ajouter un bien" style="display:none;">+</button>
 
-  <script src="widget.js?v=7"></script>
+  <script src="widget.js?v=8"></script>
   <footer style="position: fixed; bottom: 0; left: 0; right: 0; background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 4px 12px; font-size: 0.7em; color: #94a3b8; display: flex; justify-content: space-between; z-index: 1000;">
     <span>© 2026 Said Hamadou (isaytoo)</span>
     <a href="https://gristup.fr" target="_blank" style="color: #3b82f6; text-decoration: none;">gristup.fr</a>
