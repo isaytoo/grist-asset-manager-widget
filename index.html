@@ -286,6 +286,10 @@
     .tableau-excel tbody tr:hover { background: #fff3cd !important; }
     .tableau-excel tbody td { padding: 5px 12px; white-space: nowrap; color: #374151; border-right: 1px solid #e2e8f0; font-size: 12px; }
     .tableau-row-even { background: #f8fafc; }
+    .tableau-filter-row th { background: #2d3f55; padding: 4px 4px; }
+    .tableau-col-filter { width: 100%; min-width: 60px; padding: 3px 6px; border: 1px solid #475569; border-radius: 4px; font-size: 11px; background: #1e293b; color: #e2e8f0; outline: none; box-sizing: border-box; }
+    .tableau-col-filter:focus { border-color: #ef4444; background: #0f172a; }
+    .tableau-col-filter::placeholder { color: #64748b; }
     .tableau-pagination { display: flex; justify-content: center; align-items: center; gap: 4px; padding: 10px; border-top: 1px solid #e2e8f0; background: #f8fafc; flex-wrap: wrap; }
     .tableau-page-btn { padding: 4px 10px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; color: #475569; font-size: 12px; cursor: pointer; transition: all .15s; }
     .tableau-page-btn:hover:not(:disabled) { background: #ef4444; color: #fff; border-color: #ef4444; }
@@ -417,7 +421,7 @@
   <!-- FAB -->
   <button class="fab" id="fab-add" onclick="openAddModal()" title="Ajouter un bien" style="display:none;">+</button>
 
-  <script src="widget.js?v=10"></script>
+  <script src="widget.js?v=11"></script>
   <footer style="position: fixed; bottom: 0; left: 0; right: 0; background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 4px 12px; font-size: 0.7em; color: #94a3b8; display: flex; justify-content: space-between; z-index: 1000;">
     <span>© 2026 Said Hamadou (isaytoo)</span>
     <a href="https://gristup.fr" target="_blank" style="color: #3b82f6; text-decoration: none;">gristup.fr</a>

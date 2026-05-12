@@ -1078,6 +1078,7 @@ var tableauSortCol = '';
 var tableauSortDir = 'asc';
 var tableauPage = 1;
 var tableauPageSize = 50;
+var tableauColFilters = {}; // { colId: searchString }
 
 function renderTableauSearch() {
   var communes = getUniqueValues('Commune');
@@ -1144,8 +1145,31 @@ function doTableauSearch() {
     });
   }
 
+  // Apply per-column inline filters (additive "contains" on top of top-bar filters)
+  var colFilterKeys = Object.keys(tableauColFilters);
+  if (colFilterKeys.length > 0) {
+    tableauResults = tableauResults.filter(function(b) {
+      for (var k = 0; k < colFilterKeys.length; k++) {
+        var col = colFilterKeys[k];
+        var fval = tableauColFilters[col];
+        var cellVal = String(b[col] != null ? b[col] : '').toLowerCase();
+        if (cellVal.indexOf(fval) === -1) return false;
+      }
+      return true;
+    });
+  }
+
   tableauPage = 1;
   renderTableauResults();
+}
+
+function applyTableauColFilter(colId, value) {
+  if (value && value.trim()) {
+    tableauColFilters[colId] = value.trim().toLowerCase();
+  } else {
+    delete tableauColFilters[colId];
+  }
+  doTableauSearch();
 }
 
 function resetTableauSearch() {
@@ -1156,6 +1180,7 @@ function resetTableauSearch() {
   }
   tableauSortCol = '';
   tableauSortDir = 'asc';
+  tableauColFilters = {};
   doTableauSearch();
 }
 
@@ -1203,22 +1228,34 @@ function renderTableauResults() {
   // Info bar
   html += '<div class="tableau-info-bar">';
   html += '<span><strong>' + total + '</strong> ligne(s) — page <strong>' + tableauPage + '</strong>/' + totalPages + ' (' + tableauPageSize + '/page)</span>';
-  html += '<span style="color:#64748b;font-size:12px;">▲▼ Cliquer en-tête pour trier</span>';
+  html += '<span style="color:#64748b;font-size:12px;">▲▼ Trier | Filtres sous les en-têtes</span>';
   html += '</div>';
 
   // Table
   html += '<div class="tableau-scroll">';
   html += '<table class="tableau-excel">';
 
-  // Header
-  html += '<thead><tr><th style="text-align:center;min-width:36px;">#</th>';
+  // Row 1: sortable headers
+  html += '<thead>';
+  html += '<tr><th style="text-align:center;min-width:36px;">#</th>';
   for (var c = 0; c < colIds.length; c++) {
     var cid = colIds[c];
     var label = colLabels[cid] || cid;
     var arrow = tableauSortCol === cid ? (tableauSortDir === 'asc' ? ' ▲' : ' ▼') : '';
     html += '<th onclick="sortTableau(\'' + cid + '\')">' + sanitize(label) + arrow + '</th>';
   }
-  html += '</tr></thead>';
+  html += '</tr>';
+
+  // Row 2: per-column filter inputs
+  html += '<tr class="tableau-filter-row"><th></th>';
+  for (var c = 0; c < colIds.length; c++) {
+    var cid = colIds[c];
+    var fval = tableauColFilters[cid] || '';
+    html += '<th><input type="text" class="tableau-col-filter" placeholder="🔍" value="' + sanitize(fval) + '"';
+    html += ' oninput="applyTableauColFilter(\'' + cid + '\', this.value)" /></th>';
+  }
+  html += '</tr>';
+  html += '</thead>';
 
   // Body
   html += '<tbody>';
