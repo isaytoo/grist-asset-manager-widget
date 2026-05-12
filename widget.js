@@ -1311,9 +1311,6 @@ function renderTableauBodyOnly() {
     }
   }
 
-  // Scroll tableau wrapper into view (top of results, not bottom)
-  var wrapper = document.querySelector('#tableau-results .tableau-excel-wrapper');
-  if (wrapper) wrapper.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function renderTableauResults() {
