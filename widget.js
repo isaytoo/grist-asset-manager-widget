@@ -1429,26 +1429,42 @@ function renderTableauResults() {
 }
 
 function attachTableauDragScroll(el) {
-  var isDown = false;
+  var isDragging = false;
   var startX, startY, scrollLeft, scrollTop;
+  var moved = false;
+
   el.addEventListener('mousedown', function(e) {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.tagName === 'TH') return;
-    isDown = true;
-    el.classList.add('dragging');
-    startX = e.pageX - el.offsetLeft;
-    startY = e.pageY - el.offsetTop;
+    // Only drag on tbody td cells
+    var td = e.target.closest ? e.target.closest('td') : null;
+    if (!td) return;
+    isDragging = true;
+    moved = false;
+    startX = e.clientX;
+    startY = e.clientY;
     scrollLeft = el.scrollLeft;
     scrollTop = el.scrollTop;
-  });
-  el.addEventListener('mouseleave', function() { isDown = false; el.classList.remove('dragging'); });
-  el.addEventListener('mouseup', function() { isDown = false; el.classList.remove('dragging'); });
-  el.addEventListener('mousemove', function(e) {
-    if (!isDown) return;
     e.preventDefault();
-    var x = e.pageX - el.offsetLeft;
-    var y = e.pageY - el.offsetTop;
-    el.scrollLeft = scrollLeft - (x - startX);
-    el.scrollTop = scrollTop - (y - startY);
+  });
+
+  document.addEventListener('mousemove', function(e) {
+    if (!isDragging) return;
+    var dx = e.clientX - startX;
+    var dy = e.clientY - startY;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+      moved = true;
+      el.classList.add('dragging');
+    }
+    if (moved) {
+      el.scrollLeft = scrollLeft - dx;
+      el.scrollTop = scrollTop - dy;
+    }
+  });
+
+  document.addEventListener('mouseup', function() {
+    if (!isDragging) return;
+    isDragging = false;
+    moved = false;
+    el.classList.remove('dragging');
   });
 }
 
