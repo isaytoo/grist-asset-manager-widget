@@ -1121,7 +1121,8 @@ function doTableauSearch() {
   var annee = (document.getElementById('t-annee') ? document.getElementById('t-annee').value : '');
   var site = (document.getElementById('t-site') ? document.getElementById('t-site').value : '').trim().toLowerCase();
 
-  tableauResults = biens.filter(function(b) {
+  // Always start from full dataset (all biens) then filter
+  tableauResults = (biens || []).filter(function(b) {
     if (ref && String(b.Reference_DDC || '').toLowerCase().indexOf(ref) === -1) return false;
     if (commune && standardiserCommune(b.Commune) !== commune) return false;
     if (mouvement && standardiserMouvement(b.Mouvement) !== mouvement) return false;
@@ -1175,7 +1176,8 @@ function tableauGoToPage(p) {
 
 function renderTableauResults() {
   var container = document.getElementById('tableau-results');
-  if (!container) return;
+  if (!container) { console.warn('tableau-results container not found'); return; }
+  try {
 
   var total = tableauResults.length;
   var totalPages = Math.max(1, Math.ceil(total / tableauPageSize));
@@ -1261,6 +1263,10 @@ function renderTableauResults() {
 
   html += '</div>';
   container.innerHTML = html;
+  } catch(e) {
+    console.error('renderTableauResults error:', e);
+    container.innerHTML = '<div style="padding:20px;color:#ef4444;">Erreur affichage tableau: ' + e.message + '</div>';
+  }
 }
 
 function exportTableauExcel() {
