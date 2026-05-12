@@ -3216,21 +3216,38 @@ if (!isInsideGrist()) {
     var currentUserEmail = '';
     var canWriteData = false;
 
-    // First test if user can write data (real AddRecord, not empty array)
+    // First test if user can write data using BIENS_TABLE (real table, not helper)
+    // We add a temp record then immediately remove it.
+    // BM_UserInfo may be ACL-restricted even for owners so we use BM_Biens instead.
     try {
-      var testId = await grist.docApi.applyUserActions([
-        ['AddRecord', USER_INFO_TABLE, null, {}]
-      ]);
-      canWriteData = true;
-      // Clean up: remove the test row we just added
-      var newRowId = testId && testId.retValues && testId.retValues[0];
-      if (newRowId) {
-        try { await grist.docApi.applyUserActions([['RemoveRecord', USER_INFO_TABLE, newRowId]]); } catch(e) {}
+      var tables2 = await grist.docApi.listTables();
+      if (tables2.indexOf(BIENS_TABLE) !== -1) {
+        var testResult = await grist.docApi.applyUserActions([
+          ['AddRecord', BIENS_TABLE, null, { Ref_DDC: '__write_test__' }]
+        ]);
+        canWriteData = true;
+        // Immediately clean up the test record
+        var newRowId = testResult && testResult.retValues && testResult.retValues[0];
+        if (newRowId) {
+          try { await grist.docApi.applyUserActions([['RemoveRecord', BIENS_TABLE, newRowId]]); } catch(e) {}
+        }
+        console.log('Data write test OK (BM_Biens) → can write');
+      } else {
+        // Table doesn't exist yet → only an owner/editor could reach this state
+        // Try a write on BM_UserInfo as fallback
+        var testResult2 = await grist.docApi.applyUserActions([
+          ['AddRecord', USER_INFO_TABLE, null, {}]
+        ]);
+        canWriteData = true;
+        var newRowId2 = testResult2 && testResult2.retValues && testResult2.retValues[0];
+        if (newRowId2) {
+          try { await grist.docApi.applyUserActions([['RemoveRecord', USER_INFO_TABLE, newRowId2]]); } catch(e) {}
+        }
+        console.log('Data write test OK (BM_UserInfo fallback) → can write');
       }
-      console.log('Data write test OK → can write');
     } catch (writeErr) {
       canWriteData = false;
-      console.log('Data write test failed → read-only viewer');
+      console.log('Data write test failed → read-only viewer:', writeErr.message);
     }
 
     // Read current email via REST API (access token respects "View As")
