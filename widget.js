@@ -477,14 +477,11 @@ function movementBadge(mouvement) {
 // =============================================================================
 
 function isTabAllowed(tabId) {
-  // BM_Permissions is the single source of truth.
-  // An explicit row for this user → strictly use those tabs.
+  // Owner always has full access regardless of BM_Permissions content.
+  if (isOwner) return true;
+  // Non-owner with an explicit row → strictly use those tabs.
   if (hasPermissionRow) return userAllowedTabs.indexOf(tabId) !== -1;
-  // Table is empty (first run, no rows yet) → grant Owner full access so they can
-  // bootstrap the permissions. ensurePermissionsTable() will add their row.
-  if (permissionsTableEmpty && isOwner) return true;
-  // No row found for this user and table is non-empty → least-privilege default.
-  // The user must be added to BM_Permissions by an admin.
+  // No row found for this user → least-privilege default (search only).
   return tabId === 'search';
 }
 
@@ -3253,7 +3250,9 @@ async function loadAllData() {
 }
 
 function updateCanManage() {
-  // Strict: write access is gated by BM_Permissions only.
+  // Owner always can manage.
+  if (isOwner) { canManage = true; return; }
+  // Non-owner: write access is gated by BM_Permissions.
   if (hasPermissionRow) {
     canManage = userAllowedTabs.indexOf('gestion') !== -1;
     return;
