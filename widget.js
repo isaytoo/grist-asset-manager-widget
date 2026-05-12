@@ -563,10 +563,10 @@ function renderSearchView() {
   // Sub-tabs
   html += '<div class="search-sub-tabs">';
   html += '<button class="search-sub-tab' + (searchSubTab === 'classique' ? ' active' : '') + '" onclick="setSearchSubTab(\'classique\')">🔍 Recherche Classique</button>';
+  html += '<button class="search-sub-tab' + (searchSubTab === 'tableau' ? ' active' : '') + '" onclick="setSearchSubTab(\'tableau\')">📋 Vue Tableau</button>';
+  html += '<button class="search-sub-tab' + (searchSubTab === 'rapport' ? ' active' : '') + '" onclick="setSearchSubTab(\'rapport\')">📄 Rapport</button>';
   html += '<button class="search-sub-tab' + (searchSubTab === 'ia' ? ' active' : '') + '" onclick="setSearchSubTab(\'ia\')">🤖 Recherche Intelligente (IA)</button>';
   html += '<button class="search-sub-tab' + (searchSubTab === 'geo' ? ' active' : '') + '" onclick="setSearchSubTab(\'geo\')">📍 Recherche Géographique</button>';
-  html += '<button class="search-sub-tab' + (searchSubTab === 'rapport' ? ' active' : '') + '" onclick="setSearchSubTab(\'rapport\')">📄 Rapport</button>';
-  html += '<button class="search-sub-tab' + (searchSubTab === 'tableau' ? ' active' : '') + '" onclick="setSearchSubTab(\'tableau\')">📋 Vue Tableau</button>';
   html += '</div>';
 
   if (searchSubTab === 'classique') {
