@@ -1294,20 +1294,26 @@ function renderTableauBodyOnly() {
   // Update pagination
   var pager = document.querySelector('#tableau-results .tableau-pagination');
   if (pager) {
-    if (totalPages <= 1) { pager.style.display = 'none'; return; }
-    pager.style.display = 'flex';
-    var pHtml = '';
-    pHtml += '<button class="tableau-page-btn" onclick="tableauGoToPage(1)" ' + (tableauPage === 1 ? 'disabled' : '') + '>«</button>';
-    pHtml += '<button class="tableau-page-btn" onclick="tableauGoToPage(' + (tableauPage - 1) + ')" ' + (tableauPage === 1 ? 'disabled' : '') + '>‹</button>';
-    var startP = Math.max(1, tableauPage - 3);
-    var endP = Math.min(totalPages, tableauPage + 3);
-    for (var p = startP; p <= endP; p++) {
-      pHtml += '<button class="tableau-page-btn ' + (p === tableauPage ? 'active' : '') + '" onclick="tableauGoToPage(' + p + ')">' + p + '</button>';
+    if (totalPages <= 1) { pager.style.display = 'none'; }
+    else {
+      pager.style.display = 'flex';
+      var pHtml = '';
+      pHtml += '<button class="tableau-page-btn" onclick="tableauGoToPage(1)" ' + (tableauPage === 1 ? 'disabled' : '') + '>«</button>';
+      pHtml += '<button class="tableau-page-btn" onclick="tableauGoToPage(' + (tableauPage - 1) + ')" ' + (tableauPage === 1 ? 'disabled' : '') + '>‹</button>';
+      var startP = Math.max(1, tableauPage - 3);
+      var endP = Math.min(totalPages, tableauPage + 3);
+      for (var p = startP; p <= endP; p++) {
+        pHtml += '<button class="tableau-page-btn ' + (p === tableauPage ? 'active' : '') + '" onclick="tableauGoToPage(' + p + ')">' + p + '</button>';
+      }
+      pHtml += '<button class="tableau-page-btn" onclick="tableauGoToPage(' + (tableauPage + 1) + ')" ' + (tableauPage === totalPages ? 'disabled' : '') + '>›</button>';
+      pHtml += '<button class="tableau-page-btn" onclick="tableauGoToPage(' + totalPages + ')" ' + (tableauPage === totalPages ? 'disabled' : '') + '>»</button>';
+      pager.innerHTML = pHtml;
     }
-    pHtml += '<button class="tableau-page-btn" onclick="tableauGoToPage(' + (tableauPage + 1) + ')" ' + (tableauPage === totalPages ? 'disabled' : '') + '>›</button>';
-    pHtml += '<button class="tableau-page-btn" onclick="tableauGoToPage(' + totalPages + ')" ' + (tableauPage === totalPages ? 'disabled' : '') + '>»</button>';
-    pager.innerHTML = pHtml;
   }
+
+  // Scroll tableau wrapper into view (top of results, not bottom)
+  var wrapper = document.querySelector('#tableau-results .tableau-excel-wrapper');
+  if (wrapper) wrapper.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function renderTableauResults() {
@@ -1411,10 +1417,39 @@ function renderTableauResults() {
 
   html += '</div>';
   container.innerHTML = html;
+
+  // Attach drag-to-scroll on the scroll container
+  var scrollEl = container.querySelector('.tableau-scroll');
+  if (scrollEl) attachTableauDragScroll(scrollEl);
+
   } catch(e) {
     console.error('renderTableauResults error:', e);
     container.innerHTML = '<div style="padding:20px;color:#ef4444;">Erreur affichage tableau: ' + e.message + '</div>';
   }
+}
+
+function attachTableauDragScroll(el) {
+  var isDown = false;
+  var startX, startY, scrollLeft, scrollTop;
+  el.addEventListener('mousedown', function(e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.tagName === 'TH') return;
+    isDown = true;
+    el.classList.add('dragging');
+    startX = e.pageX - el.offsetLeft;
+    startY = e.pageY - el.offsetTop;
+    scrollLeft = el.scrollLeft;
+    scrollTop = el.scrollTop;
+  });
+  el.addEventListener('mouseleave', function() { isDown = false; el.classList.remove('dragging'); });
+  el.addEventListener('mouseup', function() { isDown = false; el.classList.remove('dragging'); });
+  el.addEventListener('mousemove', function(e) {
+    if (!isDown) return;
+    e.preventDefault();
+    var x = e.pageX - el.offsetLeft;
+    var y = e.pageY - el.offsetTop;
+    el.scrollLeft = scrollLeft - (x - startX);
+    el.scrollTop = scrollTop - (y - startY);
+  });
 }
 
 function exportTableauExcel() {
