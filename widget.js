@@ -1079,6 +1079,7 @@ var tableauSortDir = 'asc';
 var tableauPage = 1;
 var tableauPageSize = 50;
 var tableauColFilters = {}; // { colId: searchString }
+var tableauColIds = []; // cached column list, computed once
 
 function renderTableauSearch() {
   var communes = getUniqueValues('Commune');
@@ -1169,7 +1170,57 @@ function applyTableauColFilter(colId, value) {
   } else {
     delete tableauColFilters[colId];
   }
-  doTableauSearch();
+  // Re-filter but only update body+pagination, NOT the thead (preserves focus)
+  reFilterTableau();
+}
+
+function reFilterTableau() {
+  var ref = (document.getElementById('t-ref') ? document.getElementById('t-ref').value : '').trim().toLowerCase();
+  var commune = (document.getElementById('t-commune') ? document.getElementById('t-commune').value : '');
+  var mouvement = (document.getElementById('t-mouvement') ? document.getElementById('t-mouvement').value : '');
+  var adresse = (document.getElementById('t-adresse') ? document.getElementById('t-adresse').value : '').trim().toLowerCase();
+  var parcelle = (document.getElementById('t-parcelle') ? document.getElementById('t-parcelle').value : '').trim().toLowerCase();
+  var type = (document.getElementById('t-type') ? document.getElementById('t-type').value : '');
+  var annee = (document.getElementById('t-annee') ? document.getElementById('t-annee').value : '');
+  var site = (document.getElementById('t-site') ? document.getElementById('t-site').value : '').trim().toLowerCase();
+
+  tableauResults = (biens || []).filter(function(b) {
+    if (ref && String(b.Reference_DDC || '').toLowerCase().indexOf(ref) === -1) return false;
+    if (commune && standardiserCommune(b.Commune) !== commune) return false;
+    if (mouvement && standardiserMouvement(b.Mouvement) !== mouvement) return false;
+    if (adresse && String(b.Adresse || '').toLowerCase().indexOf(adresse) === -1) return false;
+    if (parcelle && String(b.Ref_Parcelles || '').toLowerCase().indexOf(parcelle) === -1) return false;
+    if (type && standardiserTypeBien(b.Type_Bien) !== type) return false;
+    if (annee && String(b.Annee) !== annee) return false;
+    if (site && String(b.Num_Site || '').toLowerCase().indexOf(site) === -1) return false;
+    return true;
+  });
+
+  if (tableauSortCol) {
+    tableauResults.sort(function(a, b) {
+      var va = String(a[tableauSortCol] || '').toLowerCase();
+      var vb = String(b[tableauSortCol] || '').toLowerCase();
+      if (va < vb) return tableauSortDir === 'asc' ? -1 : 1;
+      if (va > vb) return tableauSortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
+
+  var colFilterKeys = Object.keys(tableauColFilters);
+  if (colFilterKeys.length > 0) {
+    tableauResults = tableauResults.filter(function(b) {
+      for (var k = 0; k < colFilterKeys.length; k++) {
+        var col = colFilterKeys[k];
+        var fval = tableauColFilters[col];
+        var cellVal = String(b[col] != null ? b[col] : '').toLowerCase();
+        if (cellVal.indexOf(fval) === -1) return false;
+      }
+      return true;
+    });
+  }
+
+  tableauPage = 1;
+  renderTableauBodyOnly();
 }
 
 function resetTableauSearch() {
@@ -1196,7 +1247,67 @@ function sortTableau(col) {
 
 function tableauGoToPage(p) {
   tableauPage = p;
-  renderTableauResults();
+  renderTableauBodyOnly();
+}
+
+function renderTableauBodyOnly() {
+  var total = tableauResults.length;
+  var totalPages = Math.max(1, Math.ceil(total / tableauPageSize));
+  if (tableauPage > totalPages) tableauPage = totalPages;
+  var start = (tableauPage - 1) * tableauPageSize;
+  var pageData = tableauResults.slice(start, start + tableauPageSize);
+  var colIds = tableauColIds;
+
+  // Update info bar
+  var infoBar = document.querySelector('.tableau-info-bar span');
+  if (infoBar) {
+    infoBar.innerHTML = '<strong>' + total + '</strong> ligne(s) — page <strong>' + tableauPage + '</strong>/' + totalPages + ' (' + tableauPageSize + '/page)';
+  }
+
+  // Update tbody only
+  var tbody = document.querySelector('#tableau-results .tableau-excel tbody');
+  if (tbody) {
+    var bodyHtml = '';
+    if (pageData.length === 0) {
+      bodyHtml += '<tr><td colspan="' + (colIds.length + 1) + '" style="text-align:center;padding:32px;color:#94a3b8;">Aucun résultat</td></tr>';
+    }
+    for (var i = 0; i < pageData.length; i++) {
+      var b = pageData[i];
+      var rowNum = start + i + 1;
+      bodyHtml += '<tr class="' + (i % 2 === 1 ? 'tableau-row-even' : '') + '">';
+      bodyHtml += '<td style="text-align:center;color:#94a3b8;font-size:11px;background:#f1f5f9;">' + rowNum + '</td>';
+      for (var c = 0; c < colIds.length; c++) {
+        var val = b[colIds[c]];
+        if (colIds[c] === 'Date_Acte' || colIds[c] === 'Date_Integration_GIMA') {
+          var d = parseDateFR(val);
+          val = d ? formatDateFR(d) : (val != null ? String(val) : '');
+        } else {
+          val = val != null ? sanitize(String(val)) : '';
+        }
+        bodyHtml += '<td>' + val + '</td>';
+      }
+      bodyHtml += '</tr>';
+    }
+    tbody.innerHTML = bodyHtml;
+  }
+
+  // Update pagination
+  var pager = document.querySelector('#tableau-results .tableau-pagination');
+  if (pager) {
+    if (totalPages <= 1) { pager.style.display = 'none'; return; }
+    pager.style.display = 'flex';
+    var pHtml = '';
+    pHtml += '<button class="tableau-page-btn" onclick="tableauGoToPage(1)" ' + (tableauPage === 1 ? 'disabled' : '') + '>«</button>';
+    pHtml += '<button class="tableau-page-btn" onclick="tableauGoToPage(' + (tableauPage - 1) + ')" ' + (tableauPage === 1 ? 'disabled' : '') + '>‹</button>';
+    var startP = Math.max(1, tableauPage - 3);
+    var endP = Math.min(totalPages, tableauPage + 3);
+    for (var p = startP; p <= endP; p++) {
+      pHtml += '<button class="tableau-page-btn ' + (p === tableauPage ? 'active' : '') + '" onclick="tableauGoToPage(' + p + ')">' + p + '</button>';
+    }
+    pHtml += '<button class="tableau-page-btn" onclick="tableauGoToPage(' + (tableauPage + 1) + ')" ' + (tableauPage === totalPages ? 'disabled' : '') + '>›</button>';
+    pHtml += '<button class="tableau-page-btn" onclick="tableauGoToPage(' + totalPages + ')" ' + (tableauPage === totalPages ? 'disabled' : '') + '>»</button>';
+    pager.innerHTML = pHtml;
+  }
 }
 
 function renderTableauResults() {
@@ -1210,13 +1321,13 @@ function renderTableauResults() {
   var start = (tableauPage - 1) * tableauPageSize;
   var pageData = tableauResults.slice(start, start + tableauPageSize);
 
-  // Build column list from actual data keys (like the real table)
-  var colIds = [];
-  if (pageData.length > 0) {
-    colIds = Object.keys(pageData[0]).filter(function(k) { return k !== 'id'; });
-  } else if (biens.length > 0) {
-    colIds = Object.keys(biens[0]).filter(function(k) { return k !== 'id'; });
+  // Build and cache column list from actual data keys
+  if (biens.length > 0) {
+    tableauColIds = Object.keys(biens[0]).filter(function(k) { return k !== 'id'; });
+  } else if (pageData.length > 0) {
+    tableauColIds = Object.keys(pageData[0]).filter(function(k) { return k !== 'id'; });
   }
+  var colIds = tableauColIds;
   // Map to labels from BIEN_COLUMNS where available
   var colLabels = {};
   for (var x = 0; x < BIEN_COLUMNS.length; x++) {
