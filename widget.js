@@ -1183,14 +1183,25 @@ function renderTableauResults() {
   var start = (tableauPage - 1) * tableauPageSize;
   var pageData = tableauResults.slice(start, start + tableauPageSize);
 
-  var cols = BIEN_COLUMNS;
+  // Build column list from actual data keys (like the real table)
+  var colIds = [];
+  if (pageData.length > 0) {
+    colIds = Object.keys(pageData[0]).filter(function(k) { return k !== 'id'; });
+  } else if (biens.length > 0) {
+    colIds = Object.keys(biens[0]).filter(function(k) { return k !== 'id'; });
+  }
+  // Map to labels from BIEN_COLUMNS where available
+  var colLabels = {};
+  for (var x = 0; x < BIEN_COLUMNS.length; x++) {
+    colLabels[BIEN_COLUMNS[x].id] = currentLang === 'fr' ? BIEN_COLUMNS[x].label_fr : BIEN_COLUMNS[x].label_en;
+  }
 
   var html = '<div class="tableau-excel-wrapper">';
 
   // Info bar
   html += '<div class="tableau-info-bar">';
-  html += '<span><strong>' + total + '</strong> ligne(s) — page <strong>' + tableauPage + '</strong>/' + totalPages + '</span>';
-  html += '<span style="color:#64748b;font-size:12px;">Cliquez sur un en-tête pour trier</span>';
+  html += '<span><strong>' + total + '</strong> ligne(s) — page <strong>' + tableauPage + '</strong>/' + totalPages + ' (' + tableauPageSize + '/page)</span>';
+  html += '<span style="color:#64748b;font-size:12px;">▲▼ Cliquer en-tête pour trier</span>';
   html += '</div>';
 
   // Table
@@ -1198,34 +1209,31 @@ function renderTableauResults() {
   html += '<table class="tableau-excel">';
 
   // Header
-  html += '<thead><tr><th style="width:40px;text-align:center;">#</th>';
-  for (var c = 0; c < cols.length; c++) {
-    var col = cols[c];
-    var arrow = tableauSortCol === col.id ? (tableauSortDir === 'asc' ? ' ▲' : ' ▼') : '';
-    html += '<th onclick="sortTableau(\'' + col.id + '\')" title="Trier par ' + (currentLang === 'fr' ? col.label_fr : col.label_en) + '">';
-    html += (currentLang === 'fr' ? col.label_fr : col.label_en) + arrow;
-    html += '</th>';
+  html += '<thead><tr><th style="text-align:center;min-width:36px;">#</th>';
+  for (var c = 0; c < colIds.length; c++) {
+    var cid = colIds[c];
+    var label = colLabels[cid] || cid;
+    var arrow = tableauSortCol === cid ? (tableauSortDir === 'asc' ? ' ▲' : ' ▼') : '';
+    html += '<th onclick="sortTableau(\'' + cid + '\')">' + sanitize(label) + arrow + '</th>';
   }
   html += '</tr></thead>';
 
   // Body
   html += '<tbody>';
   if (pageData.length === 0) {
-    html += '<tr><td colspan="' + (cols.length + 1) + '" style="text-align:center;padding:32px;color:#94a3b8;">Aucun résultat</td></tr>';
+    html += '<tr><td colspan="' + (colIds.length + 1) + '" style="text-align:center;padding:32px;color:#94a3b8;">Aucun résultat</td></tr>';
   }
   for (var i = 0; i < pageData.length; i++) {
     var b = pageData[i];
     var rowNum = start + i + 1;
-    var isEven = i % 2 === 1;
-    html += '<tr class="' + (isEven ? 'tableau-row-even' : '') + '">';
-    html += '<td style="text-align:center;color:#94a3b8;font-size:11px;">' + rowNum + '</td>';
-    for (var c = 0; c < cols.length; c++) {
-      var val = b[cols[c].id];
-      if (cols[c].id === 'Date_Acte' || cols[c].id === 'Date_Integration_GIMA') {
+    html += '<tr class="' + (i % 2 === 1 ? 'tableau-row-even' : '') + '">';
+    html += '<td style="text-align:center;color:#94a3b8;font-size:11px;background:#f1f5f9;">' + rowNum + '</td>';
+    for (var c = 0; c < colIds.length; c++) {
+      var val = b[colIds[c]];
+      // Format dates as readable text
+      if (colIds[c] === 'Date_Acte' || colIds[c] === 'Date_Integration_GIMA') {
         var d = parseDateFR(val);
         val = d ? formatDateFR(d) : (val != null ? String(val) : '');
-      } else if (cols[c].id === 'Mouvement') {
-        val = '<span style="white-space:nowrap;">' + formatMouvement(val != null ? String(val) : '') + '</span>';
       } else {
         val = val != null ? sanitize(String(val)) : '';
       }
