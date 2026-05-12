@@ -1077,7 +1077,7 @@ var tableauResults = [];
 var tableauSortCol = '';
 var tableauSortDir = 'asc';
 var tableauPage = 1;
-var tableauPageSize = 50;
+var tableauPageSize = 100;
 var tableauColFilters = {}; // { colId: searchString }
 var tableauColIds = []; // cached column list, computed once
 
