@@ -23,8 +23,6 @@ var canManage = false; // Can write biens (Owner OR gestion permission OR Editor
 var currentLang = 'fr';
 var currentUserEmail = '';
 var userAllowedTabs = []; // Tabs allowed for current user based on BM_Permissions
-var hasPermissionRow = false; // True if BM_Permissions has an explicit row for current user
-var permissionsTableEmpty = false; // True if BM_Permissions table has zero rows (first-run case)
 var searchPage = 1;
 var searchPageSize = 20;
 var searchResults = [];
@@ -477,12 +475,14 @@ function movementBadge(mouvement) {
 // =============================================================================
 
 function isTabAllowed(tabId) {
-  // Owner always has full access regardless of BM_Permissions content.
+  // If user has custom permissions from BM_Permissions, those always take priority
+  if (userAllowedTabs.length > 0) return userAllowedTabs.indexOf(tabId) !== -1;
+  // Owners always have access to everything
   if (isOwner) return true;
-  // Non-owner with an explicit row → strictly use those tabs.
-  if (hasPermissionRow) return userAllowedTabs.indexOf(tabId) !== -1;
-  // No row found for this user → least-privilege default (search only).
-  return tabId === 'search';
+  // Fallback to role-based: editors see search + gestion, viewers see search only
+  if (tabId === 'search') return true;
+  if (tabId === 'gestion') return canManage;
+  return false;
 }
 
 function updateOwnerTabs() {
@@ -3250,17 +3250,15 @@ async function loadAllData() {
 }
 
 function updateCanManage() {
-  // Owner always can manage.
+  // Priority 1: Owners always manage
   if (isOwner) { canManage = true; return; }
-  // Non-owner: write access is gated by BM_Permissions.
-  if (hasPermissionRow) {
+  // Priority 2: explicit BM_Permissions row → follow it strictly
+  if (userAllowedTabs.length > 0) {
     canManage = userAllowedTabs.indexOf('gestion') !== -1;
     return;
   }
-  // First-run bootstrap: empty permissions table → only Owner can manage.
-  if (permissionsTableEmpty && isOwner) { canManage = true; return; }
-  // No explicit permission row → no write.
-  canManage = false;
+  // Priority 3: fallback role-based (Editor can manage if no explicit rule)
+  canManage = isEditor;
 }
 
 // =============================================================================
@@ -3315,64 +3313,49 @@ if (!isInsideGrist()) {
       console.warn('Could not create/fix helper table:', e.message);
     }
 
-    // Step 2: Get the current user email
-    // Strategy A: use /session REST endpoint with a non-readOnly token.
-    //   getAccessToken({ readOnly: false }) gives a token that respects "View As" mode.
-    //   The /session endpoint returns the email of the user as seen by the server.
-    // Strategy B (fallback): BM_UserInfo trigger formula table.
-    //   Only works when the user can write (Owner/Editor). Viewer will see stale data.
+    // Step 2: Read the email using the REST API with the access token
+    // The widget token via grist.docApi always has Owner privileges,
+    // but the access token from getAccessToken respects "View As".
     currentUserEmail = '';
-    var helperWriteSucceeded = false;
-
-    // Strategy A: /session endpoint
+    var helperWriteSucceeded = false; // Tracks whether the user could actually write data
     try {
-      var tokenFull = await grist.docApi.getAccessToken({ readOnly: false });
-      var sessionUrl = tokenFull.baseUrl.replace('/api/docs/' + tokenFull.baseUrl.split('/api/docs/')[1], '')
-                       + '/api/profile/user';
-      // Try /api/profile/user first (Grist self-hosted)
-      var sessionResp = await fetch(sessionUrl + '?auth=' + tokenFull.token);
-      if (sessionResp.ok) {
-        var sessionData = await sessionResp.json();
-        currentUserEmail = (sessionData.email || sessionData.loginEmail || '').toLowerCase().trim();
-        console.log('Email from /api/profile/user:', currentUserEmail);
-      }
-    } catch (e) {
-      console.warn('Strategy A (/profile/user) failed:', e.message);
-    }
-
-    // Strategy B: BM_UserInfo trigger formula (fallback when A fails)
-    if (!currentUserEmail) {
+      // Try to refresh: delete old rows + insert fresh one
       try {
-        // Try to write a fresh row so the trigger fires with current user.Email
-        try {
-          var existingData = await grist.docApi.fetchTable(USER_INFO_TABLE);
-          var rowIds = (existingData && existingData.id) ? existingData.id : [];
-          var actions = [];
-          for (var r = 0; r < rowIds.length; r++) {
-            actions.push(['RemoveRecord', USER_INFO_TABLE, rowIds[r]]);
-          }
-          actions.push(['AddRecord', USER_INFO_TABLE, null, {}]);
-          await grist.docApi.applyUserActions(actions);
-          helperWriteSucceeded = true;
-          console.log('Refreshed BM_UserInfo row');
-        } catch (writeErr) {
-          console.log('Could not refresh BM_UserInfo (read-only?):', writeErr.message);
+        var existingData = await grist.docApi.fetchTable(USER_INFO_TABLE);
+        var rowIds = (existingData && existingData.id) ? existingData.id : [];
+        var actions = [];
+        for (var r = 0; r < rowIds.length; r++) {
+          actions.push(['RemoveRecord', USER_INFO_TABLE, rowIds[r]]);
         }
-        // Read via REST (readOnly token — gives widget-level access, not user-level)
-        var tokenInfo = await grist.docApi.getAccessToken({ readOnly: true });
-        var tableResp = await fetch(tokenInfo.baseUrl + '/tables/' + USER_INFO_TABLE + '/records?auth=' + tokenInfo.token);
-        if (tableResp.ok) {
-          var tableData = await tableResp.json();
-          if (tableData.records && tableData.records.length > 0) {
-            currentUserEmail = (tableData.records[0].fields.UserEmail || '').toLowerCase().trim();
-            console.log('Email from BM_UserInfo fallback:', currentUserEmail);
-          }
-        }
-      } catch (e) {
-        console.warn('Strategy B (BM_UserInfo) failed:', e.message);
+        actions.push(['AddRecord', USER_INFO_TABLE, null, {}]);
+        await grist.docApi.applyUserActions(actions);
+        helperWriteSucceeded = true;
+        console.log('Refreshed helper table row');
+      } catch (writeErr) {
+        console.log('Could not refresh row (read-only?):', writeErr.message);
       }
+
+      // Read via REST API using access token (respects View As)
+      var tokenInfo = await grist.docApi.getAccessToken({ readOnly: true });
+      var tableResp = await fetch(tokenInfo.baseUrl + '/tables/' + USER_INFO_TABLE + '/records?auth=' + tokenInfo.token);
+      if (tableResp.ok) {
+        var tableData = await tableResp.json();
+        console.log('BM_UserInfo REST response:', JSON.stringify(tableData));
+        if (tableData.records && tableData.records.length > 0) {
+          currentUserEmail = tableData.records[0].fields.UserEmail || '';
+        }
+      } else {
+        console.warn('REST read of BM_UserInfo failed:', tableResp.status);
+        // Fallback to docApi
+        var userInfoData = await grist.docApi.fetchTable(USER_INFO_TABLE);
+        if (userInfoData && userInfoData.UserEmail && userInfoData.UserEmail.length > 0) {
+          currentUserEmail = userInfoData.UserEmail[0] || '';
+        }
+      }
+      console.log('Current user email:', currentUserEmail);
+    } catch (e) {
+      console.warn('Could not read helper table:', e.message);
     }
-    console.log('Final current user email:', currentUserEmail);
 
     // Step 3: Determine role from email
     // The /access endpoint returns 403 for widget tokens, so we use a different
@@ -3477,29 +3460,20 @@ async function ensurePermissionsTable() {
 
 async function loadUserPermissions() {
   userAllowedTabs = [];
-  hasPermissionRow = false;
-  permissionsTableEmpty = false;
   try {
     var data = await grist.docApi.fetchTable(PERMISSIONS_TABLE);
-    var rowCount = (data && data.id) ? data.id.length : 0;
-    permissionsTableEmpty = (rowCount === 0);
-    if (rowCount > 0 && data.Email) {
-      var email = (currentUserEmail || '').toLowerCase().trim();
-      // Refuse to match on empty email (would match rows with empty Email column)
-      if (email) {
-        for (var i = 0; i < rowCount; i++) {
-          var rowEmail = (data.Email[i] || '').toLowerCase().trim();
-          if (rowEmail && rowEmail === email) {
-            var tabs = (data.AllowedTabs[i] || '').split(',').map(function(t) { return t.trim().toLowerCase(); }).filter(function(t) { return t; });
-            userAllowedTabs = tabs;
-            hasPermissionRow = true;
-            console.log('Permissions for ' + email + ':', userAllowedTabs);
-            break;
-          }
+    if (data && data.id && data.Email) {
+      var email = currentUserEmail.toLowerCase().trim();
+      for (var i = 0; i < data.id.length; i++) {
+        var rowEmail = (data.Email[i] || '').toLowerCase().trim();
+        if (rowEmail === email) {
+          var tabs = (data.AllowedTabs[i] || '').split(',').map(function(t) { return t.trim().toLowerCase(); }).filter(function(t) { return t; });
+          userAllowedTabs = tabs;
+          console.log('Permissions for ' + email + ':', userAllowedTabs);
+          break;
         }
       }
     }
-    console.log('Permissions state — empty:', permissionsTableEmpty, 'hasRow:', hasPermissionRow, 'email:', currentUserEmail);
   } catch (e) {
     console.warn('Could not load permissions:', e.message);
   }
