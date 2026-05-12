@@ -3315,49 +3315,64 @@ if (!isInsideGrist()) {
       console.warn('Could not create/fix helper table:', e.message);
     }
 
-    // Step 2: Read the email using the REST API with the access token
-    // The widget token via grist.docApi always has Owner privileges,
-    // but the access token from getAccessToken respects "View As".
+    // Step 2: Get the current user email
+    // Strategy A: use /session REST endpoint with a non-readOnly token.
+    //   getAccessToken({ readOnly: false }) gives a token that respects "View As" mode.
+    //   The /session endpoint returns the email of the user as seen by the server.
+    // Strategy B (fallback): BM_UserInfo trigger formula table.
+    //   Only works when the user can write (Owner/Editor). Viewer will see stale data.
     currentUserEmail = '';
-    var helperWriteSucceeded = false; // Tracks whether the user could actually write data
-    try {
-      // Try to refresh: delete old rows + insert fresh one
-      try {
-        var existingData = await grist.docApi.fetchTable(USER_INFO_TABLE);
-        var rowIds = (existingData && existingData.id) ? existingData.id : [];
-        var actions = [];
-        for (var r = 0; r < rowIds.length; r++) {
-          actions.push(['RemoveRecord', USER_INFO_TABLE, rowIds[r]]);
-        }
-        actions.push(['AddRecord', USER_INFO_TABLE, null, {}]);
-        await grist.docApi.applyUserActions(actions);
-        helperWriteSucceeded = true;
-        console.log('Refreshed helper table row');
-      } catch (writeErr) {
-        console.log('Could not refresh row (read-only?):', writeErr.message);
-      }
+    var helperWriteSucceeded = false;
 
-      // Read via REST API using access token (respects View As)
-      var tokenInfo = await grist.docApi.getAccessToken({ readOnly: true });
-      var tableResp = await fetch(tokenInfo.baseUrl + '/tables/' + USER_INFO_TABLE + '/records?auth=' + tokenInfo.token);
-      if (tableResp.ok) {
-        var tableData = await tableResp.json();
-        console.log('BM_UserInfo REST response:', JSON.stringify(tableData));
-        if (tableData.records && tableData.records.length > 0) {
-          currentUserEmail = tableData.records[0].fields.UserEmail || '';
-        }
-      } else {
-        console.warn('REST read of BM_UserInfo failed:', tableResp.status);
-        // Fallback to docApi
-        var userInfoData = await grist.docApi.fetchTable(USER_INFO_TABLE);
-        if (userInfoData && userInfoData.UserEmail && userInfoData.UserEmail.length > 0) {
-          currentUserEmail = userInfoData.UserEmail[0] || '';
-        }
+    // Strategy A: /session endpoint
+    try {
+      var tokenFull = await grist.docApi.getAccessToken({ readOnly: false });
+      var sessionUrl = tokenFull.baseUrl.replace('/api/docs/' + tokenFull.baseUrl.split('/api/docs/')[1], '')
+                       + '/api/profile/user';
+      // Try /api/profile/user first (Grist self-hosted)
+      var sessionResp = await fetch(sessionUrl + '?auth=' + tokenFull.token);
+      if (sessionResp.ok) {
+        var sessionData = await sessionResp.json();
+        currentUserEmail = (sessionData.email || sessionData.loginEmail || '').toLowerCase().trim();
+        console.log('Email from /api/profile/user:', currentUserEmail);
       }
-      console.log('Current user email:', currentUserEmail);
     } catch (e) {
-      console.warn('Could not read helper table:', e.message);
+      console.warn('Strategy A (/profile/user) failed:', e.message);
     }
+
+    // Strategy B: BM_UserInfo trigger formula (fallback when A fails)
+    if (!currentUserEmail) {
+      try {
+        // Try to write a fresh row so the trigger fires with current user.Email
+        try {
+          var existingData = await grist.docApi.fetchTable(USER_INFO_TABLE);
+          var rowIds = (existingData && existingData.id) ? existingData.id : [];
+          var actions = [];
+          for (var r = 0; r < rowIds.length; r++) {
+            actions.push(['RemoveRecord', USER_INFO_TABLE, rowIds[r]]);
+          }
+          actions.push(['AddRecord', USER_INFO_TABLE, null, {}]);
+          await grist.docApi.applyUserActions(actions);
+          helperWriteSucceeded = true;
+          console.log('Refreshed BM_UserInfo row');
+        } catch (writeErr) {
+          console.log('Could not refresh BM_UserInfo (read-only?):', writeErr.message);
+        }
+        // Read via REST (readOnly token — gives widget-level access, not user-level)
+        var tokenInfo = await grist.docApi.getAccessToken({ readOnly: true });
+        var tableResp = await fetch(tokenInfo.baseUrl + '/tables/' + USER_INFO_TABLE + '/records?auth=' + tokenInfo.token);
+        if (tableResp.ok) {
+          var tableData = await tableResp.json();
+          if (tableData.records && tableData.records.length > 0) {
+            currentUserEmail = (tableData.records[0].fields.UserEmail || '').toLowerCase().trim();
+            console.log('Email from BM_UserInfo fallback:', currentUserEmail);
+          }
+        }
+      } catch (e) {
+        console.warn('Strategy B (BM_UserInfo) failed:', e.message);
+      }
+    }
+    console.log('Final current user email:', currentUserEmail);
 
     // Step 3: Determine role from email
     // The /access endpoint returns 403 for widget tokens, so we use a different
