@@ -3212,38 +3212,39 @@ if (!isInsideGrist()) {
       console.warn('Could not create/fix helper table:', e.message);
     }
 
-    // Step 2: Read the email using the REST API with the access token
-    // The widget token via grist.docApi always has Owner privileges,
-    // but the access token from getAccessToken respects "View As".
+    // Step 2: Read the email via the REST API (respects "View As")
     var currentUserEmail = '';
-    try {
-      // Try to refresh: delete old rows + insert fresh one
-      try {
-        var existingData = await grist.docApi.fetchTable(USER_INFO_TABLE);
-        var rowIds = (existingData && existingData.id) ? existingData.id : [];
-        var actions = [];
-        for (var r = 0; r < rowIds.length; r++) {
-          actions.push(['RemoveRecord', USER_INFO_TABLE, rowIds[r]]);
-        }
-        actions.push(['AddRecord', USER_INFO_TABLE, null, {}]);
-        await grist.docApi.applyUserActions(actions);
-        console.log('Refreshed helper table row');
-      } catch (writeErr) {
-        console.log('Could not refresh row (read-only?):', writeErr.message);
-      }
+    var canWriteData = false;
 
-      // Read via REST API using access token (respects View As)
+    // First test if user can write data (real AddRecord, not empty array)
+    try {
+      var testId = await grist.docApi.applyUserActions([
+        ['AddRecord', USER_INFO_TABLE, null, {}]
+      ]);
+      canWriteData = true;
+      // Clean up: remove the test row we just added
+      var newRowId = testId && testId.retValues && testId.retValues[0];
+      if (newRowId) {
+        try { await grist.docApi.applyUserActions([['RemoveRecord', USER_INFO_TABLE, newRowId]]); } catch(e) {}
+      }
+      console.log('Data write test OK → can write');
+    } catch (writeErr) {
+      canWriteData = false;
+      console.log('Data write test failed → read-only viewer');
+    }
+
+    // Read current email via REST API (access token respects "View As")
+    try {
       var tokenInfo = await grist.docApi.getAccessToken({ readOnly: true });
       var tableResp = await fetch(tokenInfo.baseUrl + '/tables/' + USER_INFO_TABLE + '/records?auth=' + tokenInfo.token);
       if (tableResp.ok) {
         var tableData = await tableResp.json();
-        console.log('BM_UserInfo REST response:', JSON.stringify(tableData));
         if (tableData.records && tableData.records.length > 0) {
           currentUserEmail = tableData.records[0].fields.UserEmail || '';
         }
-      } else {
-        console.warn('REST read of BM_UserInfo failed:', tableResp.status);
-        // Fallback to docApi
+      }
+      // If no row yet (viewer can't write), try docApi fallback
+      if (!currentUserEmail) {
         var userInfoData = await grist.docApi.fetchTable(USER_INFO_TABLE);
         if (userInfoData && userInfoData.UserEmail && userInfoData.UserEmail.length > 0) {
           currentUserEmail = userInfoData.UserEmail[0] || '';
@@ -3251,26 +3252,17 @@ if (!isInsideGrist()) {
       }
       console.log('Current user email:', currentUserEmail);
     } catch (e) {
-      console.warn('Could not read helper table:', e.message);
+      console.warn('Could not read user email:', e.message);
     }
 
-    // Step 3: Determine role from email
-    // The /access endpoint returns 403 for widget tokens, so we use a different
-    // approach: read _grist_ACLPrincipals which contains user emails and their
-    // instance IDs, then cross-reference with _grist_ACLMembers to find roles.
-    // If that fails, we check if the "ModifyColumn" on _grist_ACLRules was
-    // blocked (ACL_DENY = not Owner). Combined with the email, we can determine:
-    //   - If ModifyColumn was blocked → user is NOT Owner
-    //   - If user can write data (applyUserActions) → Editor
-    //   - If user cannot write data → Viewer
+    // Step 3: Determine role
+    // - Owner: can do structure modifications (ModifyColumn)
+    // - Editor: can write data but not structure
+    // - Viewer: cannot write data at all
     var roleDetected = false;
-    if (currentUserEmail) {
-      // We already know the email. Now determine the role.
-      // The "Could not fix column: Blocked by full structure access rules" error
-      // tells us the user is NOT an Owner (Owners can modify structure).
-      // So we use a structure modification test to distinguish Owner from Editor.
+    if (canWriteData) {
+      // Can write data → at least Editor. Check if also Owner (structure access).
       try {
-        // Try a harmless structure read/modify that only Owners can do
         await grist.docApi.applyUserActions([
           ['ModifyColumn', USER_INFO_TABLE, 'UserEmail', {
             isFormula: false,
@@ -3279,39 +3271,21 @@ if (!isInsideGrist()) {
             recalcDeps: null
           }]
         ]);
-        // If it succeeded → Owner
         isOwner = true; isEditor = false; roleDetected = true;
-        console.log('Structure modify succeeded → Owner');
+        console.log('Structure modify OK → Owner');
       } catch (structErr) {
-        if (structErr.message && (structErr.message.indexOf('ACL_DENY') !== -1 || structErr.message.indexOf('Blocked by') !== -1 || structErr.message.indexOf('structure access') !== -1)) {
-          // Structure modification blocked → not Owner
-          // Can they write data?
-          try {
-            // We already know they can write (they refreshed the helper row above)
-            // But let's verify with a simple test
-            await grist.docApi.applyUserActions([]);
-            isOwner = false; isEditor = true; roleDetected = true;
-            console.log('Structure blocked but data write OK → Editor');
-          } catch (writeErr) {
-            isOwner = false; isEditor = false; roleDetected = true;
-            console.log('Structure blocked and data write blocked → Viewer');
-          }
-        } else {
-          console.warn('Unexpected error testing structure access:', structErr.message);
-        }
+        isOwner = false; isEditor = true; roleDetected = true;
+        console.log('Structure blocked but data write OK → Editor');
       }
+    } else {
+      // Cannot write → Viewer
+      isOwner = false; isEditor = false; roleDetected = true;
+      console.log('Cannot write data → Viewer');
     }
 
-    // Fallback if role not detected
     if (!roleDetected) {
-      try {
-        await grist.docApi.applyUserActions([]);
-        isOwner = true; isEditor = false;
-        console.log('Fallback: user can write → treating as Owner');
-      } catch (e) {
-        isOwner = false; isEditor = false;
-        console.log('Fallback: user cannot write → Viewer');
-      }
+      isOwner = false; isEditor = false;
+      console.log('Fallback: treating as Viewer (safe default)');
     }
     console.log('Final: isOwner:', isOwner, 'isEditor:', isEditor);
 

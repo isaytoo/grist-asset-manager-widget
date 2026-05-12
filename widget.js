@@ -23,6 +23,8 @@ var canManage = false; // Can write biens (Owner OR gestion permission OR Editor
 var currentLang = 'fr';
 var currentUserEmail = '';
 var userAllowedTabs = []; // Tabs allowed for current user based on BM_Permissions
+var hasPermissionRow = false; // True if BM_Permissions has an explicit row for current user
+var permissionsTableEmpty = false; // True if BM_Permissions table has zero rows (first-run case)
 var searchPage = 1;
 var searchPageSize = 20;
 var searchResults = [];
@@ -475,14 +477,15 @@ function movementBadge(mouvement) {
 // =============================================================================
 
 function isTabAllowed(tabId) {
-  // If user has custom permissions from BM_Permissions, those always take priority
-  if (userAllowedTabs.length > 0) return userAllowedTabs.indexOf(tabId) !== -1;
-  // Owners always have access to everything
-  if (isOwner) return true;
-  // Fallback to role-based: editors see search + gestion, viewers see search only
-  if (tabId === 'search') return true;
-  if (tabId === 'gestion') return canManage;
-  return false;
+  // BM_Permissions is the single source of truth.
+  // An explicit row for this user → strictly use those tabs.
+  if (hasPermissionRow) return userAllowedTabs.indexOf(tabId) !== -1;
+  // Table is empty (first run, no rows yet) → grant Owner full access so they can
+  // bootstrap the permissions. ensurePermissionsTable() will add their row.
+  if (permissionsTableEmpty && isOwner) return true;
+  // No row found for this user and table is non-empty → least-privilege default.
+  // The user must be added to BM_Permissions by an admin.
+  return tabId === 'search';
 }
 
 function updateOwnerTabs() {
@@ -3250,15 +3253,15 @@ async function loadAllData() {
 }
 
 function updateCanManage() {
-  // Priority 1: Owners always manage
-  if (isOwner) { canManage = true; return; }
-  // Priority 2: explicit BM_Permissions row → follow it strictly
-  if (userAllowedTabs.length > 0) {
+  // Strict: write access is gated by BM_Permissions only.
+  if (hasPermissionRow) {
     canManage = userAllowedTabs.indexOf('gestion') !== -1;
     return;
   }
-  // Priority 3: fallback role-based (Editor can manage if no explicit rule)
-  canManage = isEditor;
+  // First-run bootstrap: empty permissions table → only Owner can manage.
+  if (permissionsTableEmpty && isOwner) { canManage = true; return; }
+  // No explicit permission row → no write.
+  canManage = false;
 }
 
 // =============================================================================
@@ -3460,20 +3463,29 @@ async function ensurePermissionsTable() {
 
 async function loadUserPermissions() {
   userAllowedTabs = [];
+  hasPermissionRow = false;
+  permissionsTableEmpty = false;
   try {
     var data = await grist.docApi.fetchTable(PERMISSIONS_TABLE);
-    if (data && data.id && data.Email) {
-      var email = currentUserEmail.toLowerCase().trim();
-      for (var i = 0; i < data.id.length; i++) {
-        var rowEmail = (data.Email[i] || '').toLowerCase().trim();
-        if (rowEmail === email) {
-          var tabs = (data.AllowedTabs[i] || '').split(',').map(function(t) { return t.trim().toLowerCase(); }).filter(function(t) { return t; });
-          userAllowedTabs = tabs;
-          console.log('Permissions for ' + email + ':', userAllowedTabs);
-          break;
+    var rowCount = (data && data.id) ? data.id.length : 0;
+    permissionsTableEmpty = (rowCount === 0);
+    if (rowCount > 0 && data.Email) {
+      var email = (currentUserEmail || '').toLowerCase().trim();
+      // Refuse to match on empty email (would match rows with empty Email column)
+      if (email) {
+        for (var i = 0; i < rowCount; i++) {
+          var rowEmail = (data.Email[i] || '').toLowerCase().trim();
+          if (rowEmail && rowEmail === email) {
+            var tabs = (data.AllowedTabs[i] || '').split(',').map(function(t) { return t.trim().toLowerCase(); }).filter(function(t) { return t; });
+            userAllowedTabs = tabs;
+            hasPermissionRow = true;
+            console.log('Permissions for ' + email + ':', userAllowedTabs);
+            break;
+          }
         }
       }
     }
+    console.log('Permissions state — empty:', permissionsTableEmpty, 'hasRow:', hasPermissionRow, 'email:', currentUserEmail);
   } catch (e) {
     console.warn('Could not load permissions:', e.message);
   }
