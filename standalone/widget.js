@@ -1013,6 +1013,9 @@ function doSearch() {
       if (va > vb) return sortDir === 'asc' ? 1 : -1;
       return 0;
     });
+  } else {
+    // Par défaut : les plus récents d'abord (id décroissant)
+    searchResults.sort(function(a, b) { return (b.id || 0) - (a.id || 0); });
   }
 
   searchPage = 1;

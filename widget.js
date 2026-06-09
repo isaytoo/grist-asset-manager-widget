@@ -1052,6 +1052,10 @@ function doSearch() {
       if (va > vb) return sortDir === 'asc' ? 1 : -1;
       return 0;
     });
+  } else {
+    // Par défaut : les plus récents d'abord (id décroissant) → un bien ajouté
+    // apparaît en haut de la page 1 immédiatement après enregistrement.
+    searchResults.sort(function(a, b) { return (b.id || 0) - (a.id || 0); });
   }
 
   searchPage = 1;
@@ -1144,6 +1148,9 @@ function doTableauSearch() {
       if (va > vb) return tableauSortDir === 'asc' ? 1 : -1;
       return 0;
     });
+  } else {
+    // Par défaut : les plus récents d'abord (id décroissant)
+    tableauResults.sort(function(a, b) { return (b.id || 0) - (a.id || 0); });
   }
 
   // Apply per-column inline filters (additive "contains" on top of top-bar filters)
@@ -1204,6 +1211,9 @@ function reFilterTableau() {
       if (va > vb) return tableauSortDir === 'asc' ? 1 : -1;
       return 0;
     });
+  } else {
+    // Par défaut : les plus récents d'abord (id décroissant)
+    tableauResults.sort(function(a, b) { return (b.id || 0) - (a.id || 0); });
   }
 
   var colFilterKeys = Object.keys(tableauColFilters);
