@@ -332,9 +332,9 @@ function showToast(msg, type) {
 }
 
 function closeModal(event) {
-  if (event.target.classList.contains('modal-overlay')) {
-    document.getElementById('modal-container').innerHTML = '';
-  }
+  // Désactivé volontairement : pas de fermeture au clic extérieur (évite les fermetures
+  // accidentelles, notamment lors d'une sélection de texte relâchée hors de la modale).
+  // Fermeture uniquement via la croix (✕) ou Annuler.
 }
 
 function closeModalForce() {
@@ -3013,20 +3013,22 @@ async function saveBien(bienId) {
 
   try {
     if (bienId) {
-      // Update
+      // Update — on garde la modale ouverte (fermeture via la croix uniquement)
       await grist.docApi.applyUserActions([
         ['UpdateRecord', BIENS_TABLE, bienId, record]
       ]);
       showToast(t('bienUpdated'), 'success');
+      await loadAllData();
     } else {
-      // Add
-      await grist.docApi.applyUserActions([
+      // Add — on récupère l'id créé puis on bascule en mode édition (évite un doublon au re-clic)
+      var res = await grist.docApi.applyUserActions([
         ['AddRecord', BIENS_TABLE, null, record]
       ]);
+      var newId = res && res.retValues && res.retValues[0];
       showToast(t('bienAdded'), 'success');
+      await loadAllData();
+      if (newId) openEditModal(newId);
     }
-    closeModalForce();
-    await loadAllData();
   } catch (e) {
     console.error('Error saving bien:', e);
     showToast('Erreur: ' + e.message, 'error');
