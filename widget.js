@@ -29,6 +29,7 @@ var searchResults = [];
 var sortCol = '';
 var sortDir = 'asc';
 var searchSubTab = 'classique';
+var searchFiltersCollapsed = (typeof localStorage !== 'undefined' && localStorage.getItem('amw_filters_collapsed') === '1');
 
 // Column definitions for BM_Biens
 var BIEN_COLUMNS = [
@@ -552,12 +553,34 @@ function setSearchSubTab(tab) {
   renderSearchView();
 }
 
+// Replier / déplier la zone de filtres pour libérer de l'espace (état mémorisé)
+function toggleSearchFilters() {
+  searchFiltersCollapsed = !searchFiltersCollapsed;
+  try { localStorage.setItem('amw_filters_collapsed', searchFiltersCollapsed ? '1' : '0'); } catch (e) {}
+  var body = document.getElementById('search-filters-body');
+  if (body) body.style.display = searchFiltersCollapsed ? 'none' : '';
+  var btn = document.getElementById('filters-toggle-btn');
+  if (btn) {
+    var lblShow = currentLang === 'fr' ? 'Afficher les filtres' : 'Show filters';
+    var lblHide = currentLang === 'fr' ? 'Masquer les filtres' : 'Hide filters';
+    btn.textContent = searchFiltersCollapsed ? '▸ ' + lblShow : '▾ ' + lblHide;
+  }
+}
+
 function renderSearchView() {
+  var canCollapse = (searchSubTab === 'classique' || searchSubTab === 'tableau');
   var html = '<div class="section-card">';
-  html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:4px;">';
+  html += '<div style="display:flex;align-items:center;gap:12px;">';
   html += '<div style="width:48px;height:48px;background:#fef2f2;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;">🔍</div>';
   html += '<div><h3 style="margin:0;">' + t('searchTitle') + '</h3>';
   html += '<p style="color:#64748b;margin:0;">' + t('searchSubtitle') + '</p></div>';
+  html += '</div>';
+  if (canCollapse) {
+    var lblShow = currentLang === 'fr' ? 'Afficher les filtres' : 'Show filters';
+    var lblHide = currentLang === 'fr' ? 'Masquer les filtres' : 'Hide filters';
+    html += '<button class="filters-toggle" id="filters-toggle-btn" onclick="toggleSearchFilters()">' + (searchFiltersCollapsed ? '▸ ' + lblShow : '▾ ' + lblHide) + '</button>';
+  }
   html += '</div>';
 
   // Sub-tabs
@@ -570,9 +593,9 @@ function renderSearchView() {
   html += '</div>';
 
   if (searchSubTab === 'classique') {
-    html += renderClassicSearch();
+    html += '<div id="search-filters-body"' + (searchFiltersCollapsed ? ' style="display:none;"' : '') + '>' + renderClassicSearch() + '</div>';
   } else if (searchSubTab === 'tableau') {
-    html += renderTableauSearch();
+    html += '<div id="search-filters-body"' + (searchFiltersCollapsed ? ' style="display:none;"' : '') + '>' + renderTableauSearch() + '</div>';
   } else if (searchSubTab === 'ia') {
     html += '<div style="text-align:center;padding:60px 20px;color:#94a3b8;">';
     html += '<div style="font-size:48px;margin-bottom:12px;">🤖</div>';

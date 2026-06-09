@@ -271,6 +271,8 @@
     @media (max-width: 768px) { .analysis-grid { grid-template-columns: 1fr; } .sub-tabs { flex-wrap: wrap; } .detail-sub-tabs { gap: 4px; } }
 
     /* ========== SEARCH SUB-TABS ========== */
+    .filters-toggle { padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; white-space: nowrap; }
+    .filters-toggle:hover { background: #fef2f2; color: #dc2626; border-color: #fca5a5; }
     .search-sub-tabs { display: flex; gap: 0; margin-bottom: 20px; background: #f8fafc; border-radius: 10px; overflow: hidden; border: 1px solid #e2e8f0; }
     .search-sub-tab { flex: 1; padding: 10px 16px; font-size: 13px; font-weight: 700; color: #64748b; background: transparent; border: none; cursor: pointer; transition: all .2s; display: flex; align-items: center; justify-content: center; gap: 6px; border-right: 1px solid #e2e8f0; }
     .search-sub-tab:last-child { border-right: none; }
@@ -444,7 +446,7 @@
   <!-- FAB -->
   <button class="fab" id="fab-add" onclick="openAddModal()" title="Ajouter un bien" style="display:none;">+</button>
 
-  <script src="widget.js?v=19"></script>
+  <script src="widget.js?v=20"></script>
   <footer style="position: fixed; bottom: 0; left: 0; right: 0; background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 4px 12px; font-size: 0.7em; color: #94a3b8; z-index: 1000;">
     <span>© 2026 Said Hamadou (SPI)</span>
   </footer>
