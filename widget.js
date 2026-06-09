@@ -1082,8 +1082,43 @@ var tableauSortCol = '';
 var tableauSortDir = 'asc';
 var tableauPage = 1;
 var tableauPageSize = 100;
-var tableauColFilters = {}; // { colId: searchString }
+var tableauColFilters = {}; // { colId: searchString (texte "contient") | [valeurs] (multi-sélection) }
 var tableauColIds = []; // cached column list, computed once
+
+// Colonnes catégorielles : filtre par cases à cocher (multi-sélection) au lieu de texte
+var TABLEAU_MULTI_COLS = ['Gestion_SPI', 'Mouvement', 'Annee', 'Commune', 'Type_Bien',
+  'Nouvelle_Copropriete', 'Occupation', 'Jouissance_Anticipee', 'Jouissance_Differee',
+  'Bail_Longue_Duree', 'Acquisition_Compte_Tiers', 'Prefinancement', 'Import_GIMA', 'Saisies_Manuelles'];
+function tableauIsMultiCol(cid) { return TABLEAU_MULTI_COLS.indexOf(cid) !== -1; }
+
+// Valeur de cellule standardisée (alignée sur les valeurs proposées dans les listes)
+function tableauStdCell(col, raw) {
+  raw = raw == null ? '' : String(raw).trim();
+  if (col === 'Commune') return standardiserCommune(raw);
+  if (col === 'Mouvement') return standardiserMouvement(raw);
+  if (col === 'Type_Bien') return standardiserTypeBien(raw);
+  return raw;
+}
+
+// Un enregistrement passe-t-il tous les filtres de colonnes ? (texte OU multi-sélection)
+function tableauRowPassesColFilters(b) {
+  var keys = Object.keys(tableauColFilters);
+  for (var k = 0; k < keys.length; k++) {
+    var col = keys[k];
+    var f = tableauColFilters[col];
+    if (Array.isArray(f)) {
+      if (f.length === 0) continue;
+      var cv = tableauStdCell(col, b[col]).toLowerCase();
+      var ok = false;
+      for (var m = 0; m < f.length; m++) { if (String(f[m]).toLowerCase() === cv) { ok = true; break; } }
+      if (!ok) return false;
+    } else {
+      var cell = String(b[col] != null ? b[col] : '').toLowerCase();
+      if (cell.indexOf(f) === -1) return false;
+    }
+  }
+  return true;
+}
 
 function renderTableauSearch() {
   var communes = getUniqueValues('Commune');
@@ -1153,18 +1188,9 @@ function doTableauSearch() {
     tableauResults.sort(function(a, b) { return (b.id || 0) - (a.id || 0); });
   }
 
-  // Apply per-column inline filters (additive "contains" on top of top-bar filters)
-  var colFilterKeys = Object.keys(tableauColFilters);
-  if (colFilterKeys.length > 0) {
-    tableauResults = tableauResults.filter(function(b) {
-      for (var k = 0; k < colFilterKeys.length; k++) {
-        var col = colFilterKeys[k];
-        var fval = tableauColFilters[col];
-        var cellVal = String(b[col] != null ? b[col] : '').toLowerCase();
-        if (cellVal.indexOf(fval) === -1) return false;
-      }
-      return true;
-    });
+  // Filtres par colonne (texte "contient" ou multi-sélection)
+  if (Object.keys(tableauColFilters).length > 0) {
+    tableauResults = tableauResults.filter(tableauRowPassesColFilters);
   }
 
   tableauPage = 1;
@@ -1178,6 +1204,73 @@ function applyTableauColFilter(colId, value) {
     delete tableauColFilters[colId];
   }
   // Re-filter but only update body+pagination, NOT the thead (preserves focus)
+  reFilterTableau();
+}
+
+// ── Filtres multi-sélection par colonne (cases à cocher + recherche) ──
+function toggleColDropdown(ev, cid) {
+  if (ev) ev.stopPropagation();
+  var dd = document.getElementById('coldd-' + cid);
+  if (!dd) return;
+  var willOpen = dd.style.display === 'none';
+  // Fermer tous les autres menus
+  document.querySelectorAll('.tableau-col-dd').forEach(function(d) { d.style.display = 'none'; });
+  if (willOpen) {
+    // Positionnement fixe sous le bouton (le menu est hors du conteneur scrollable)
+    var btn = document.getElementById('mfbtn-' + cid);
+    if (btn) {
+      var r = btn.getBoundingClientRect();
+      var ddWidth = 240;
+      var left = Math.min(r.left, window.innerWidth - ddWidth - 8);
+      dd.style.left = Math.max(8, left) + 'px';
+      dd.style.top = (r.bottom + 2) + 'px';
+    }
+    dd.style.display = 'block';
+    var s = dd.querySelector('.tableau-col-dd-search');
+    if (s) { s.value = ''; filterColDropdownSearch(cid, ''); s.focus(); }
+    setTimeout(function() {
+      document.addEventListener('mousedown', function closeDD(e) {
+        var box = document.getElementById('coldd-' + cid);
+        var btn = document.getElementById('mfbtn-' + cid);
+        if (box && !box.contains(e.target) && e.target !== btn) {
+          box.style.display = 'none';
+          document.removeEventListener('mousedown', closeDD);
+        }
+      });
+    }, 0);
+  }
+}
+
+function toggleColValue(cid, value) {
+  var arr = Array.isArray(tableauColFilters[cid]) ? tableauColFilters[cid] : [];
+  var i = arr.indexOf(value);
+  if (i === -1) arr.push(value); else arr.splice(i, 1);
+  if (arr.length) tableauColFilters[cid] = arr; else delete tableauColFilters[cid];
+  // Mettre à jour le libellé du bouton sans reconstruire le thead (garde le menu ouvert)
+  var btn = document.getElementById('mfbtn-' + cid);
+  if (btn) {
+    btn.textContent = (arr.length ? (arr.length + ' sél.') : '🔍 Tous') + ' ▾';
+    btn.classList.toggle('active', arr.length > 0);
+  }
+  reFilterTableau();
+}
+
+function filterColDropdownSearch(cid, q) {
+  var dd = document.getElementById('coldd-' + cid);
+  if (!dd) return;
+  q = (q || '').toLowerCase().trim();
+  dd.querySelectorAll('.tableau-col-dd-opt').forEach(function(lbl) {
+    var txt = (lbl.textContent || '').toLowerCase();
+    lbl.style.display = (!q || txt.indexOf(q) !== -1) ? '' : 'none';
+  });
+}
+
+function clearColFilter(cid) {
+  delete tableauColFilters[cid];
+  var dd = document.getElementById('coldd-' + cid);
+  if (dd) dd.querySelectorAll('input[type="checkbox"]').forEach(function(c) { c.checked = false; });
+  var btn = document.getElementById('mfbtn-' + cid);
+  if (btn) { btn.textContent = '🔍 Tous ▾'; btn.classList.remove('active'); }
   reFilterTableau();
 }
 
@@ -1216,17 +1309,8 @@ function reFilterTableau() {
     tableauResults.sort(function(a, b) { return (b.id || 0) - (a.id || 0); });
   }
 
-  var colFilterKeys = Object.keys(tableauColFilters);
-  if (colFilterKeys.length > 0) {
-    tableauResults = tableauResults.filter(function(b) {
-      for (var k = 0; k < colFilterKeys.length; k++) {
-        var col = colFilterKeys[k];
-        var fval = tableauColFilters[col];
-        var cellVal = String(b[col] != null ? b[col] : '').toLowerCase();
-        if (cellVal.indexOf(fval) === -1) return false;
-      }
-      return true;
-    });
+  if (Object.keys(tableauColFilters).length > 0) {
+    tableauResults = tableauResults.filter(tableauRowPassesColFilters);
   }
 
   tableauPage = 1;
@@ -1374,9 +1458,26 @@ function renderTableauResults() {
   html += '<tr class="tableau-filter-row"><th></th>';
   for (var c = 0; c < colIds.length; c++) {
     var cid = colIds[c];
-    var fval = tableauColFilters[cid] || '';
-    html += '<th><input type="text" class="tableau-col-filter" placeholder="🔍" value="' + sanitize(fval) + '"';
-    html += ' oninput="applyTableauColFilter(\'' + cid + '\', this.value)" /></th>';
+    if (tableauIsMultiCol(cid)) {
+      var sel = Array.isArray(tableauColFilters[cid]) ? tableauColFilters[cid] : [];
+      var btnLabel = sel.length ? (sel.length + ' sél.') : '🔍 Tous';
+      html += '<th style="position:relative;">';
+      html += '<button type="button" class="tableau-col-mfbtn' + (sel.length ? ' active' : '') + '" id="mfbtn-' + cid + '" onclick="toggleColDropdown(event,\'' + cid + '\')">' + btnLabel + ' ▾</button>';
+      html += '<div class="tableau-col-dd" id="coldd-' + cid + '" style="display:none;" onmousedown="event.stopPropagation()">';
+      html += '<input type="text" class="tableau-col-dd-search" placeholder="' + (currentLang === 'fr' ? 'Rechercher...' : 'Search...') + '" oninput="filterColDropdownSearch(\'' + cid + '\', this.value)" onclick="event.stopPropagation()">';
+      html += '<div class="tableau-col-dd-actions"><span onclick="clearColFilter(\'' + cid + '\')">✕ ' + (currentLang === 'fr' ? 'Effacer' : 'Clear') + '</span></div>';
+      html += '<div class="tableau-col-dd-list">';
+      var vals = getUniqueValues(cid);
+      for (var v = 0; v < vals.length; v++) {
+        var checked = sel.indexOf(vals[v]) !== -1 ? ' checked' : '';
+        html += '<label class="tableau-col-dd-opt"><input type="checkbox" value="' + sanitize(vals[v]) + '"' + checked + ' onchange="toggleColValue(\'' + cid + '\', this.value)"> ' + sanitize(vals[v]) + '</label>';
+      }
+      html += '</div></div></th>';
+    } else {
+      var fval = (typeof tableauColFilters[cid] === 'string') ? tableauColFilters[cid] : '';
+      html += '<th><input type="text" class="tableau-col-filter" placeholder="🔍" value="' + sanitize(fval) + '"';
+      html += ' oninput="applyTableauColFilter(\'' + cid + '\', this.value)" /></th>';
+    }
   }
   html += '</tr>';
   html += '</thead>';
