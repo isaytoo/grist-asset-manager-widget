@@ -2230,7 +2230,7 @@ function buildFormHtml(bien) {
   }
   communeSelect += '</select>';
   html += '<div class="form-group"><label>Commune <span class="required">*</span></label>' + communeSelect + '</div>';
-  html += '<div class="form-group"><label>Adresse</label><input type="text" id="f-Adresse" value="' + v('Adresse') + '" /></div>';
+  html += '<div class="form-group" style="grid-column: span 2;"><label>Adresse</label><input type="text" id="f-Adresse" value="' + v('Adresse') + '" /></div>';
   html += '<div class="form-group"><label>Référence Parcelles</label><input type="text" id="f-Ref_Parcelles" value="' + v('Ref_Parcelles') + '" /></div>';
   html += '</div></div>';
 
@@ -2281,11 +2281,15 @@ function buildFormHtml(bien) {
   // Section: Acquisition et Financement
   html += '<div class="form-section"><h4>💰 ' + t('sectionFinancement') + '</h4>';
   html += '<div class="form-grid">';
-  html += '<div class="form-group"><label>Acquisition compte tiers</label><select id="f-Acquisition_Compte_Tiers">';
-  for (var i = 0; i < acqCompteOptions.length; i++) {
-    html += '<option value="' + acqCompteOptions[i] + '"' + (selMatch(v('Acquisition_Compte_Tiers'), acqCompteOptions[i]) ? ' selected' : '') + '>' + (acqCompteOptions[i] || t('select')) + '</option>';
+  // Acquisition compte tiers : uniquement en modification (champ conservé pour les anciens
+  // enregistrements), masqué à l'ajout d'un nouveau bien.
+  if (isEdit) {
+    html += '<div class="form-group"><label>Acquisition compte tiers</label><select id="f-Acquisition_Compte_Tiers">';
+    for (var i = 0; i < acqCompteOptions.length; i++) {
+      html += '<option value="' + acqCompteOptions[i] + '"' + (selMatch(v('Acquisition_Compte_Tiers'), acqCompteOptions[i]) ? ' selected' : '') + '>' + (acqCompteOptions[i] || t('select')) + '</option>';
+    }
+    html += '</select></div>';
   }
-  html += '</select></div>';
   html += '<div class="form-group"><label>Préfinancement</label><select id="f-Prefinancement">';
   for (var i = 0; i < prefinancementOptions.length; i++) {
     html += '<option value="' + prefinancementOptions[i] + '"' + (selMatch(v('Prefinancement'), prefinancementOptions[i]) ? ' selected' : '') + '>' + (prefinancementOptions[i] || t('select')) + '</option>';
