@@ -713,6 +713,18 @@ function toISODate(d) {
   return d.getFullYear() + '-' + mm + '-' + dd;
 }
 
+// Convertit du HTML (champs Jodit) en texte brut : supprime balises + décode entités (&nbsp;…)
+function richToPlain(html) {
+  if (html === null || html === undefined) return '';
+  var s = String(html);
+  if (s.indexOf('<') === -1 && s.indexOf('&') === -1) return s;
+  var tmp = document.createElement('div');
+  tmp.innerHTML = s;
+  var txt = tmp.textContent || tmp.innerText || '';
+  return txt.replace(/\xA0/g, ' ').trim();
+}
+var HTML_RICH_COLS = { Nature_Bien: 1, Observation: 1 };
+
 function generateRapportPDF() {
   var dateDebutEl = document.getElementById('rapport-date-debut');
   var dateFinEl = document.getElementById('rapport-date-fin');
@@ -1065,6 +1077,8 @@ function exportSearchExcel() {
       if (fields[f] === 'Date_Acte' || fields[f] === 'Date_Integration_GIMA') {
         var d = parseDateFR(val);
         val = d ? formatDateFR(d) : (val || '');
+      } else if (HTML_RICH_COLS[fields[f]]) {
+        val = richToPlain(val);
       } else {
         val = val != null ? String(val) : '';
       }
