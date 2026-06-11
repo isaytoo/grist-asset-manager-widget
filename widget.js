@@ -1021,7 +1021,9 @@ function generateRapportPDF() {
     columnStyles: colStyles,
     didParseCell: function(data) {
       if (data.section === 'body') {
-        var rowData = tableBody[data.row];
+        // data.row est un objet Row (autoTable v3) → utiliser .index ; tolère aussi un nombre
+        var ri = (data.row && typeof data.row.index === 'number') ? data.row.index : data.row;
+        var rowData = tableBody[ri];
         if (rowData && rowData._isGroupHeader) {
           data.cell.styles.fillColor = [241, 245, 249];
           data.cell.styles.fontStyle = 'bold';
