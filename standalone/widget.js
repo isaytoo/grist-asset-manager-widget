@@ -705,6 +705,14 @@ function formatDateFR(d) {
   return dd + '/' + mm + '/' + yyyy;
 }
 
+// Format ISO yyyy-mm-dd — format canonique de stockage (cohérent avec <input type="date">)
+function toISODate(d) {
+  if (!d) return '';
+  var mm = String(d.getMonth() + 1).padStart(2, '0');
+  var dd = String(d.getDate()).padStart(2, '0');
+  return d.getFullYear() + '-' + mm + '-' + dd;
+}
+
 function generateRapportPDF() {
   var dateDebutEl = document.getElementById('rapport-date-debut');
   var dateFinEl = document.getElementById('rapport-date-fin');
@@ -2761,17 +2769,27 @@ function parseSelectedSheet() {
     }
   }
 
+  // Colonnes de type date : on normalise en ISO yyyy-mm-dd. Sans cette étape, Excel
+  // fournit un numéro de série (ex. 39902) stocké tel quel → interprété comme 1970.
+  var IMPORT_DATE_COLS = { Date_Acte: 1, Date_Integration_GIMA: 1 };
+
   // Convert rows
   importParsedRows = [];
   for (var r = 0; r < jsonData.length; r++) {
     var row = {};
     for (var h in mapping) {
+      var col = mapping[h];
       var val = jsonData[r][h];
       // Clean HTML tags from values
       if (typeof val === 'string') {
         val = val.replace(/<[^>]*>/g, '').trim();
       }
-      row[mapping[h]] = val !== undefined && val !== null ? String(val) : '';
+      if (IMPORT_DATE_COLS[col] && val !== '' && val !== undefined && val !== null) {
+        var pd = parseDateFR(val);
+        row[col] = pd ? toISODate(pd) : String(val);
+      } else {
+        row[col] = val !== undefined && val !== null ? String(val) : '';
+      }
     }
     // Only add rows that have at least a reference or commune
     if (row.Reference_DDC || row.Commune) {
