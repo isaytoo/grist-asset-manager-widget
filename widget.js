@@ -1170,6 +1170,8 @@ var TABLEAU_MULTI_COLS = ['Gestion_SPI', 'Mouvement', 'Annee', 'Commune', 'Type_
   'Nouvelle_Copropriete', 'Occupation', 'Jouissance_Anticipee', 'Jouissance_Differee',
   'Bail_Longue_Duree', 'Acquisition_Compte_Tiers', 'Prefinancement', 'Import_GIMA', 'Saisies_Manuelles'];
 function tableauIsMultiCol(cid) { return TABLEAU_MULTI_COLS.indexOf(cid) !== -1; }
+// Colonnes date : filtre par plage (du… au…)
+function tableauIsDateCol(cid) { return cid === 'Date_Acte' || cid === 'Date_Integration_GIMA'; }
 
 // Valeur de cellule standardisée (alignée sur les valeurs proposées dans les listes)
 function tableauStdCell(col, raw) {
@@ -1192,6 +1194,13 @@ function tableauRowPassesColFilters(b) {
       var ok = false;
       for (var m = 0; m < f.length; m++) { if (String(f[m]).toLowerCase() === cv) { ok = true; break; } }
       if (!ok) return false;
+    } else if (f && typeof f === 'object') {
+      // Filtre plage de dates { from, to } (ISO yyyy-mm-dd)
+      if (!f.from && !f.to) continue;
+      var dd = parseDateFR(b[col]);
+      if (!dd) return false;
+      if (f.from) { var df = new Date(f.from + 'T00:00:00'); if (!isNaN(df.getTime()) && dd < df) return false; }
+      if (f.to) { var dt = new Date(f.to + 'T23:59:59'); if (!isNaN(dt.getTime()) && dd > dt) return false; }
     } else {
       var cell = String(b[col] != null ? b[col] : '').toLowerCase();
       if (cell.indexOf(f) === -1) return false;
@@ -1284,6 +1293,16 @@ function applyTableauColFilter(colId, value) {
     delete tableauColFilters[colId];
   }
   // Re-filter but only update body+pagination, NOT the thead (preserves focus)
+  reFilterTableau();
+}
+
+// Filtre plage de dates (du… au…) pour les colonnes date
+function applyTableauDateFilter(colId, which, value) {
+  var cur = (tableauColFilters[colId] && typeof tableauColFilters[colId] === 'object' && !Array.isArray(tableauColFilters[colId])) ? tableauColFilters[colId] : {};
+  cur = { from: cur.from || '', to: cur.to || '' };
+  cur[which] = value || '';
+  if (!cur.from && !cur.to) delete tableauColFilters[colId];
+  else tableauColFilters[colId] = cur;
   reFilterTableau();
 }
 
@@ -1553,6 +1572,12 @@ function renderTableauResults() {
         html += '<label class="tableau-col-dd-opt"><input type="checkbox" value="' + sanitize(vals[v]) + '"' + checked + ' onchange="toggleColValue(\'' + cid + '\', this.value)"> ' + sanitize(vals[v]) + '</label>';
       }
       html += '</div></div></th>';
+    } else if (tableauIsDateCol(cid)) {
+      var dr = (tableauColFilters[cid] && typeof tableauColFilters[cid] === 'object' && !Array.isArray(tableauColFilters[cid])) ? tableauColFilters[cid] : {};
+      html += '<th><div style="display:flex;flex-direction:column;gap:2px;min-width:110px;">';
+      html += '<input type="date" class="tableau-col-datefilter" value="' + (dr.from || '') + '" title="' + (currentLang === 'fr' ? 'Du' : 'From') + '" onchange="applyTableauDateFilter(\'' + cid + '\',\'from\',this.value)" />';
+      html += '<input type="date" class="tableau-col-datefilter" value="' + (dr.to || '') + '" title="' + (currentLang === 'fr' ? 'Au' : 'To') + '" onchange="applyTableauDateFilter(\'' + cid + '\',\'to\',this.value)" />';
+      html += '</div></th>';
     } else {
       var fval = (typeof tableauColFilters[cid] === 'string') ? tableauColFilters[cid] : '';
       html += '<th><input type="text" class="tableau-col-filter" placeholder="🔍" value="' + sanitize(fval) + '"';
@@ -1625,6 +1650,9 @@ function attachTableauDragScroll(el) {
     // Only drag on tbody td cells
     var td = e.target.closest ? e.target.closest('td') : null;
     if (!td) return;
+    // Ne pas bloquer la sélection de texte : le défilement par glisser ne s'active que
+    // sur la colonne n° (1re cellule). Les cellules de données restent sélectionnables.
+    if (td.cellIndex !== 0) return;
     isDragging = true;
     moved = false;
     startX = e.clientX;
