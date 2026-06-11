@@ -3,6 +3,7 @@
 // =============================================================================
 
 var BIENS_TABLE = 'BM_Biens';
+var ARCHIVE_TABLE = 'BM_Biens_Archive';
 var GESTIONNAIRES_TABLE = 'BM_Gestionnaires';
 
 // State
@@ -2742,6 +2743,14 @@ function renderImportView() {
   html += '<div id="fix-dates-result" style="margin-top:8px;font-size:13px;"></div>';
   html += '</div>';
 
+  // Archive de sécurité + restauration
+  html += '<div style="margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0;">';
+  html += '<h4 style="font-weight:800;margin-bottom:6px;">🗄️ ' + (currentLang === 'fr' ? 'Archive de sécurité' : 'Safety archive') + '</h4>';
+  html += '<p style="font-size:12px;color:#64748b;margin-bottom:10px;">' + (currentLang === 'fr' ? 'Avant chaque import en mode « Remplacer », la table est automatiquement sauvegardée (dernier instantané). Vous pouvez la restaurer ici si besoin.' : 'Before each "Replace" import, the table is automatically backed up (last snapshot). You can restore it here.') + '</p>';
+  html += '<button class="btn btn-secondary" onclick="restoreFromArchive()" id="restore-btn">♻️ ' + (currentLang === 'fr' ? 'Restaurer la dernière archive' : 'Restore last archive') + '</button>';
+  html += '<div id="restore-result" style="margin-top:8px;font-size:13px;"></div>';
+  html += '</div>';
+
   html += '</div>';
 
   document.getElementById('import-view').innerHTML = html;
@@ -2939,6 +2948,14 @@ async function executeImport() {
     var BATCH_SIZE = 50;
 
     if (importMode === 'replace') {
+      // Archive de sécurité AVANT écrasement (instantané unique)
+      if (biens.length > 0) {
+        try {
+          var pt = document.getElementById('import-progress-text');
+          if (pt) pt.textContent = currentLang === 'fr' ? 'Archivage de sécurité…' : 'Safety archive…';
+          await archiveCurrentBiens();
+        } catch (archErr) { console.warn('Archivage impossible:', archErr.message); }
+      }
       // Delete all existing records
       if (biens.length > 0) {
         var deleteIds = biens.map(function(b) { return b.id; });
@@ -3031,6 +3048,91 @@ async function executeImport() {
     progressArea.innerHTML += '<p style="color:#ef4444;margin-top:8px;">❌ Erreur: ' + sanitize(e.message) + '</p>';
   }
 
+  if (btn) btn.disabled = false;
+}
+
+// ── Archive de sécurité (instantané unique) ──
+async function ensureArchiveTable() {
+  var tables = await grist.docApi.listTables();
+  if (tables.indexOf(ARCHIVE_TABLE) === -1) {
+    var cols = [];
+    for (var i = 0; i < BIEN_COLUMNS.length; i++) {
+      cols.push({ id: BIEN_COLUMNS[i].id, fields: { type: 'Text', label: BIEN_COLUMNS[i].label_fr } });
+    }
+    cols.push({ id: 'Archive_Date', fields: { type: 'DateTime', label: 'Date archivage' } });
+    await grist.docApi.applyUserActions([['AddTable', ARCHIVE_TABLE, cols]]);
+  }
+}
+async function fetchArchiveRows() {
+  var d = await grist.docApi.fetchTable(ARCHIVE_TABLE);
+  if (!d || !d.id) return [];
+  var cols = Object.keys(d).filter(function(k) { return k !== 'id'; });
+  var rows = [];
+  for (var i = 0; i < d.id.length; i++) {
+    var r = { id: d.id[i] };
+    cols.forEach(function(c) { r[c] = d[c][i]; });
+    rows.push(r);
+  }
+  return rows;
+}
+async function archiveCurrentBiens() {
+  await ensureArchiveTable();
+  var B = 50;
+  var ex = await grist.docApi.fetchTable(ARCHIVE_TABLE);
+  var ids = (ex && ex.id) ? ex.id : [];
+  for (var i = 0; i < ids.length; i += B) {
+    await grist.docApi.applyUserActions(ids.slice(i, i + B).map(function(id) { return ['RemoveRecord', ARCHIVE_TABLE, id]; }));
+  }
+  var now = Math.floor(Date.now() / 1000);
+  var fields = BIEN_COLUMNS.map(function(c) { return c.id; });
+  for (var i = 0; i < biens.length; i += B) {
+    var acts = biens.slice(i, i + B).map(function(b) {
+      var rec = {};
+      for (var f = 0; f < fields.length; f++) rec[fields[f]] = b[fields[f]] != null ? b[fields[f]] : '';
+      rec.Archive_Date = now;
+      return ['AddRecord', ARCHIVE_TABLE, null, rec];
+    });
+    if (acts.length) await grist.docApi.applyUserActions(acts);
+  }
+  return biens.length;
+}
+async function restoreFromArchive() {
+  if (!canManage) { showToast(t('accessDenied'), 'error'); return; }
+  var resEl = document.getElementById('restore-result');
+  var btn = document.getElementById('restore-btn');
+  var rows;
+  try { await ensureArchiveTable(); rows = await fetchArchiveRows(); }
+  catch (e) { showToast('Erreur: ' + e.message, 'error'); return; }
+  if (!rows.length) {
+    if (resEl) resEl.innerHTML = '<span style="color:#64748b;">' + (currentLang === 'fr' ? 'Aucune archive disponible.' : 'No archive available.') + '</span>';
+    showToast(currentLang === 'fr' ? 'Aucune archive' : 'No archive', 'info');
+    return;
+  }
+  var snap = rows[0].Archive_Date ? formatDateFR(new Date(rows[0].Archive_Date * 1000)) : '';
+  if (!confirm((currentLang === 'fr' ? 'Restaurer ' : 'Restore ') + rows.length + (currentLang === 'fr' ? ' bien(s) archivé(s)' : ' archived asset(s)') + (snap ? (currentLang === 'fr' ? ' du ' : ' from ') + snap : '') + ' ?\n' + (currentLang === 'fr' ? 'Le contenu actuel de la table sera REMPLACÉ.' : 'Current table content will be REPLACED.'))) return;
+  if (btn) btn.disabled = true;
+  if (resEl) resEl.innerHTML = '⏳ ' + (currentLang === 'fr' ? 'Restauration en cours…' : 'Restoring…');
+  try {
+    var B = 50, fields = BIEN_COLUMNS.map(function(c) { return c.id; });
+    var curIds = biens.map(function(b) { return b.id; });
+    for (var i = 0; i < curIds.length; i += B) {
+      await grist.docApi.applyUserActions(curIds.slice(i, i + B).map(function(id) { return ['RemoveRecord', BIENS_TABLE, id]; }));
+    }
+    for (var i = 0; i < rows.length; i += B) {
+      var acts = rows.slice(i, i + B).map(function(r) {
+        var rec = {};
+        for (var f = 0; f < fields.length; f++) rec[fields[f]] = r[fields[f]] != null ? r[fields[f]] : '';
+        return ['AddRecord', BIENS_TABLE, null, rec];
+      });
+      await grist.docApi.applyUserActions(acts);
+    }
+    if (resEl) resEl.innerHTML = '<span style="color:#22c55e;font-weight:700;">✅ ' + rows.length + (currentLang === 'fr' ? ' bien(s) restauré(s).' : ' asset(s) restored.') + '</span>';
+    showToast((currentLang === 'fr' ? 'Restauration : ' : 'Restored: ') + rows.length, 'success');
+    await loadAllData();
+  } catch (e) {
+    if (resEl) resEl.innerHTML = '<span style="color:#ef4444;">❌ ' + sanitize(e.message) + '</span>';
+    showToast('Erreur: ' + e.message, 'error');
+  }
   if (btn) btn.disabled = false;
 }
 
