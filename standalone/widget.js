@@ -802,7 +802,7 @@ function generateRapportPDF() {
   var pdfCols = [
     { header: 'Commune', field: 'Commune', width: 28 },
     { header: 'Mouvement', field: 'Mouvement', width: 24 },
-    { header: 'Référence DDC', field: 'Reference_DDC', width: 32 },
+    { header: 'Nature du Bien', field: 'Nature_Bien', width: 50 },
     { header: 'Adresse', field: 'Adresse', width: 42 },
     { header: 'Parcelles', field: 'Ref_Parcelles', width: 28 },
     { header: 'Type de Bien', field: 'Type_Bien', width: 22 },
@@ -811,7 +811,6 @@ function generateRapportPDF() {
     { header: 'Surf. Parcelle', field: 'Surface_Parcelle', width: 18 },
     { header: 'Surf. Assurance', field: 'Surface_Assurance', width: 18 },
     { header: 'Gestion SPI', field: 'Gestion_SPI', width: 16 },
-    { header: 'Nom OFA', field: 'Nom_OFA_OFT', width: 22 },
     { header: 'Nouvelle Copropriété', field: 'Nouvelle_Copropriete', width: 18 },
     { header: 'Occupation', field: 'Occupation', width: 16 },
     { header: 'Jouissance Anticipée', field: 'Jouissance_Anticipee', width: 18 },
@@ -821,9 +820,10 @@ function generateRapportPDF() {
     { header: 'Acquisition Compte Tiers', field: 'Acquisition_Compte_Tiers', width: 18 },
     { header: 'Préfinancement', field: 'Prefinancement', width: 18 },
     { header: 'Tiers Vendeur/Acquéreur', field: 'Tiers_Vendeur_Acquereur', width: 30 },
-    { header: 'Nature du Bien', field: 'Nature_Bien', width: 50 },
     { header: 'Dossier', field: 'Dossier_Numerique', width: 16 },
-    { header: 'Observations', field: 'Observation', width: 50 }
+    { header: 'Observations', field: 'Observation', width: 50 },
+    { header: 'Référence DDC', field: 'Reference_DDC', width: 32 },
+    { header: 'Nom OFA', field: 'Nom_OFA_OFT', width: 22 }
   ];
 
   // Create PDF - A2 landscape (594 x 420 mm)
