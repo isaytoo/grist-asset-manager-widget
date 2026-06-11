@@ -1476,6 +1476,8 @@ function renderTableauBodyOnly() {
         if (colIds[c] === 'Date_Acte' || colIds[c] === 'Date_Integration_GIMA') {
           var d = parseDateFR(val);
           val = d ? formatDateFR(d) : (val != null ? String(val) : '');
+        } else if (HTML_RICH_COLS[colIds[c]]) {
+          val = sanitize(richToPlain(val));
         } else {
           val = val != null ? sanitize(String(val)) : '';
         }
@@ -1605,6 +1607,8 @@ function renderTableauResults() {
       if (colIds[c] === 'Date_Acte' || colIds[c] === 'Date_Integration_GIMA') {
         var d = parseDateFR(val);
         val = d ? formatDateFR(d) : (val != null ? String(val) : '');
+      } else if (HTML_RICH_COLS[colIds[c]]) {
+        val = sanitize(richToPlain(val));
       } else {
         val = val != null ? sanitize(String(val)) : '';
       }
@@ -1714,20 +1718,11 @@ function exportTableauExcel() {
     }
     rows.push(row);
   }
-  var csv = rows.map(function(r) {
-    return r.map(function(cell) {
-      var s = String(cell).replace(/"/g, '""');
-      return '"' + s + '"';
-    }).join(';');
-  }).join('\r\n');
-  var bom = '\uFEFF';
-  var blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
-  a.href = url;
-  a.download = 'vue_tableau_' + new Date().toISOString().slice(0, 10) + '.csv';
-  a.click();
-  URL.revokeObjectURL(url);
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = headers.map(function(h) { return { wch: Math.max(h.length + 2, 14) }; });
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Vue Tableau');
+  XLSX.writeFile(wb, 'vue_tableau_' + new Date().toISOString().slice(0, 10) + '.xlsx');
   showToast(tableauResults.length + ' lignes exportées', 'success');
 }
 
