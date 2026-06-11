@@ -2675,6 +2675,14 @@ function renderImportView() {
   // Progress area
   html += '<div id="import-progress-area"></div>';
 
+  // Maintenance : corriger les dates déjà stockées (numéros de série Excel → ISO)
+  html += '<div style="margin-top:24px;padding-top:16px;border-top:1px solid #e2e8f0;">';
+  html += '<h4 style="font-weight:800;margin-bottom:6px;">🛠️ ' + (currentLang === 'fr' ? 'Maintenance des dates' : 'Date maintenance') + '</h4>';
+  html += '<p style="font-size:12px;color:#64748b;margin-bottom:10px;">' + (currentLang === 'fr' ? 'Convertit les dates déjà enregistrées au mauvais format (numéros de série Excel, ex. 39902) en dates ISO. Sans réimporter.' : 'Converts already-stored dates in the wrong format (Excel serials) to ISO. No re-import needed.') + '</p>';
+  html += '<button class="btn btn-secondary" onclick="fixExistingDates()" id="fix-dates-btn">🛠️ ' + (currentLang === 'fr' ? 'Corriger les dates existantes' : 'Fix existing dates') + '</button>';
+  html += '<div id="fix-dates-result" style="margin-top:8px;font-size:13px;"></div>';
+  html += '</div>';
+
   html += '</div>';
 
   document.getElementById('import-view').innerHTML = html;
@@ -2964,6 +2972,57 @@ async function executeImport() {
     progressArea.innerHTML += '<p style="color:#ef4444;margin-top:8px;">❌ Erreur: ' + sanitize(e.message) + '</p>';
   }
 
+  if (btn) btn.disabled = false;
+}
+
+async function fixExistingDates() {
+  if (!canManage) { showToast(t('accessDenied'), 'error'); return; }
+  var DATE_COLS = ['Date_Acte', 'Date_Integration_GIMA'];
+  var ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
+  var resEl = document.getElementById('fix-dates-result');
+  var btn = document.getElementById('fix-dates-btn');
+
+  var updates = [];
+  for (var i = 0; i < biens.length; i++) {
+    var b = biens[i], rec = {}, changed = false;
+    for (var c = 0; c < DATE_COLS.length; c++) {
+      var col = DATE_COLS[c];
+      var cur = b[col];
+      if (cur === undefined || cur === null || cur === '') continue;
+      var curStr = String(cur).trim();
+      if (ISO_RE.test(curStr)) continue;
+      var d = parseDateFR(curStr);
+      if (d) {
+        var iso = toISODate(d);
+        if (iso && iso !== curStr) { rec[col] = iso; changed = true; }
+      }
+    }
+    if (changed) updates.push(['UpdateRecord', BIENS_TABLE, b.id, rec]);
+  }
+
+  if (!updates.length) {
+    if (resEl) resEl.innerHTML = '<span style="color:#22c55e;">✓ ' + (currentLang === 'fr' ? 'Aucune date à corriger.' : 'No date to fix.') + '</span>';
+    showToast(currentLang === 'fr' ? 'Aucune date à corriger' : 'Nothing to fix', 'info');
+    return;
+  }
+
+  if (!confirm((currentLang === 'fr' ? 'Corriger ' : 'Fix ') + updates.length + (currentLang === 'fr' ? ' enregistrement(s) ?' : ' record(s)?'))) return;
+  if (btn) btn.disabled = true;
+  if (resEl) resEl.innerHTML = '⏳ ' + (currentLang === 'fr' ? 'Correction en cours…' : 'Fixing…');
+
+  try {
+    var BATCH = 50, done = 0;
+    for (var k = 0; k < updates.length; k += BATCH) {
+      await grist.docApi.applyUserActions(updates.slice(k, k + BATCH));
+      done += Math.min(BATCH, updates.length - k);
+    }
+    if (resEl) resEl.innerHTML = '<span style="color:#22c55e;font-weight:700;">✅ ' + done + ' ' + (currentLang === 'fr' ? 'date(s) corrigée(s).' : 'date(s) fixed.') + '</span>';
+    showToast((currentLang === 'fr' ? 'Dates corrigées : ' : 'Dates fixed: ') + done, 'success');
+    await loadAllData();
+  } catch (e) {
+    if (resEl) resEl.innerHTML = '<span style="color:#ef4444;">❌ ' + sanitize(e.message) + '</span>';
+    showToast('Erreur: ' + e.message, 'error');
+  }
   if (btn) btn.disabled = false;
 }
 
