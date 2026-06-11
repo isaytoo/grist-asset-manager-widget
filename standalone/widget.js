@@ -853,9 +853,15 @@ function generateRapportPDF() {
   doc.setTextColor(100, 116, 139);
   doc.text('Période : ' + periodStr, marginLeft, 28);
 
-  // Total count
+  // Total count + décompte Gestion SPI (Oui / Non)
+  var spiOui = 0, spiNon = 0;
+  for (var si = 0; si < filtered.length; si++) {
+    var spiv = String(filtered[si].Gestion_SPI != null ? filtered[si].Gestion_SPI : '').trim().toLowerCase();
+    if (spiv === 'oui') spiOui++;
+    else if (spiv === 'non') spiNon++;
+  }
   doc.setFontSize(10);
-  doc.text(filtered.length + ' bien(s) trouvé(s)', marginLeft, 34);
+  doc.text(filtered.length + ' bien(s) trouvé(s)   •   Gestion SPI : Oui ' + spiOui + ' | Non ' + spiNon, marginLeft, 34);
 
   // Movement color legend
   var legendY = 20;
