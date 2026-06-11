@@ -725,6 +725,26 @@ function richToPlain(html) {
 }
 var HTML_RICH_COLS = { Nature_Bien: 1, Observation: 1 };
 
+// Convertit une couleur CSS (rgb(), #hex, #abc, nom courant) en [r,g,b] pour jsPDF
+function cssColorToRgb(c) {
+  if (!c) return null;
+  c = String(c).trim();
+  var rgb = c.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  if (rgb) return [parseInt(rgb[1], 10), parseInt(rgb[2], 10), parseInt(rgb[3], 10)];
+  var hex6 = c.match(/^#?([0-9a-f]{6})$/i);
+  if (hex6) { var h = hex6[1]; return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]; }
+  var hex3 = c.match(/^#?([0-9a-f]{3})$/i);
+  if (hex3) { var x = hex3[1]; return [parseInt(x[0] + x[0], 16), parseInt(x[1] + x[1], 16), parseInt(x[2] + x[2], 16)]; }
+  var named = { red: [220, 38, 38], green: [22, 163, 74], blue: [37, 99, 235], orange: [234, 88, 12], purple: [147, 51, 234], black: [15, 23, 42], white: [255, 255, 255], gray: [100, 116, 139], grey: [100, 116, 139] };
+  return named[c.toLowerCase()] || null;
+}
+function firstHtmlColor(html) {
+  if (!html) return null;
+  var s = String(html);
+  var m = s.match(/color\s*:\s*([^;"'}]+)/i) || s.match(/<font[^>]*\bcolor\s*=\s*["']?([^"'>\s]+)/i);
+  return m ? cssColorToRgb(m[1]) : null;
+}
+
 function generateRapportPDF() {
   var dateDebutEl = document.getElementById('rapport-date-debut');
   var dateFinEl = document.getElementById('rapport-date-fin');
@@ -889,11 +909,19 @@ function generateRapportPDF() {
     for (var b = 0; b < groupBiens.length; b++) {
       var bien = groupBiens[b];
       var row = [];
+      var colColors = {};
       for (var c = 0; c < pdfCols.length; c++) {
-        var val = bien[pdfCols[c].field];
-        row.push(val != null ? String(val) : '');
+        var field = pdfCols[c].field;
+        var raw = bien[field];
+        if (HTML_RICH_COLS[field]) {
+          var col = firstHtmlColor(raw);
+          if (col) colColors[c] = col;
+          row.push(richToPlain(raw));
+        } else {
+          row.push(raw != null ? String(raw) : '');
+        }
       }
-      tableBody.push({ _isGroupHeader: false, _cells: row, _mouvement: bien.Mouvement });
+      tableBody.push({ _isGroupHeader: false, _cells: row, _mouvement: bien.Mouvement, _colColors: colColors });
     }
   }
 
@@ -941,11 +969,17 @@ function generateRapportPDF() {
             data.cell.colSpan = pdfCols.length;
           }
         } else if (rowData && !rowData._isGroupHeader) {
-          // Color the Mouvement column (index 1)
-          if (data.column.index === 1) {
+          // Cellule Mouvement (index 1) : fond coloré façon badge
+          if (data.column.index === 1 && rowData._mouvement) {
             var mvtColor = getMvtColor(rowData._mouvement);
-            data.cell.styles.textColor = mvtColor;
+            data.cell.styles.fillColor = mvtColor;
+            data.cell.styles.textColor = [255, 255, 255];
             data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.halign = 'center';
+          }
+          // Champs riches (Nature/Observation) : appliquer la couleur de texte saisie
+          if (rowData._colColors && rowData._colColors[data.column.index]) {
+            data.cell.styles.textColor = rowData._colColors[data.column.index];
           }
         }
       }
