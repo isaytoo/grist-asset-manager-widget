@@ -2101,7 +2101,10 @@ function openDetailModal(bienId, showManageButtons) {
   html += '<h4 class="detail-section-title"><span>💰</span> Acquisition et Financement</h4>';
   html += '<div class="detail-section-line"></div>';
   html += '<div class="detail-grid-3">';
-  html += detailCard('Acquisition Compte Tiers', dv('Acquisition_Compte_Tiers'));
+  // Acquisition Compte Tiers : masqué s'il est vide (comme à l'ajout) ; visible si renseigné (anciens biens)
+  if (b.Acquisition_Compte_Tiers && String(b.Acquisition_Compte_Tiers).trim()) {
+    html += detailCard('Acquisition Compte Tiers', dv('Acquisition_Compte_Tiers'));
+  }
   html += detailCard('Préfinancement', dv('Prefinancement'));
   html += detailCard('Tiers Vendeur ou Acquéreur', dv('Tiers_Vendeur_Acquereur'));
   html += '</div>';
