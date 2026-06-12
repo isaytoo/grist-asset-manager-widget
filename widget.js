@@ -991,7 +991,7 @@ function generateRapportPDF() {
   var pdfCols = [
     { header: 'Commune', field: 'Commune', width: 28 },
     { header: 'Mouvement', field: 'Mouvement', width: 24 },
-    { header: 'Nature du Bien', field: 'Nature_Bien', width: 50 },
+    { header: 'Nature du Bien', field: 'Nature_Bien', width: 60 },
     { header: 'Adresse', field: 'Adresse', width: 42 },
     { header: 'Parcelles', field: 'Ref_Parcelles', width: 28 },
     { header: 'Type de Bien', field: 'Type_Bien', width: 22 },
@@ -1009,7 +1009,7 @@ function generateRapportPDF() {
     { header: 'Préfinancement', field: 'Prefinancement', width: 18 },
     { header: 'Tiers Vendeur/Acquéreur', field: 'Tiers_Vendeur_Acquereur', width: 30 },
     { header: 'Dossier', field: 'Dossier_Numerique', width: 16 },
-    { header: 'Observations', field: 'Observation', width: 50 },
+    { header: 'Observations', field: 'Observation', width: 60 },
     { header: 'Référence DDC', field: 'Reference_DDC', width: 32 },
     { header: 'Nom OFA', field: 'Nom_OFA_OFT', width: 22 }
   ];
