@@ -628,6 +628,84 @@ function renderSearchView() {
   else if (searchSubTab === 'tableau') doTableauSearch();
 }
 
+// Filtres multi-sélection de la recherche classique
+var classicMultiFilters = { Commune: [], Mouvement: [], Type_Bien: [], Annee: [] };
+function classicPlaceholder(field) {
+  return field === 'Commune' ? t('allCommunes') : field === 'Mouvement' ? t('allMovements') : field === 'Type_Bien' ? t('allTypes') : t('allYears');
+}
+function classicBtnLabel(field) {
+  var arr = classicMultiFilters[field] || [];
+  if (!arr.length) return classicPlaceholder(field);
+  return arr.length + (currentLang === 'fr' ? ' sélectionné' + (arr.length > 1 ? 's' : '') : ' selected');
+}
+function classicMultiField(labelText, field, values) {
+  var arr = classicMultiFilters[field] || [];
+  var h = '<div class="search-field"><label>' + labelText + '</label><div style="position:relative;">';
+  h += '<button type="button" class="search-multi-btn' + (arr.length ? ' active' : '') + '" id="smfbtn-' + field + '" onclick="toggleClassicDropdown(event,\'' + field + '\')"><span>' + sanitize(classicBtnLabel(field)) + '</span><span>▾</span></button>';
+  h += '<div class="tableau-col-dd" id="smfdd-' + field + '" style="display:none;" onmousedown="event.stopPropagation()">';
+  h += '<input type="text" class="tableau-col-dd-search" placeholder="' + (currentLang === 'fr' ? 'Rechercher...' : 'Search...') + '" oninput="filterClassicDropdownSearch(\'' + field + '\', this.value)" onclick="event.stopPropagation()">';
+  h += '<div class="tableau-col-dd-actions"><span onclick="clearClassicFilter(\'' + field + '\')">✕ ' + (currentLang === 'fr' ? 'Effacer' : 'Clear') + '</span></div>';
+  h += '<div class="tableau-col-dd-list">';
+  for (var i = 0; i < values.length; i++) {
+    var checked = arr.indexOf(values[i]) !== -1 ? ' checked' : '';
+    h += '<label class="tableau-col-dd-opt"><input type="checkbox" value="' + sanitize(values[i]) + '"' + checked + ' onchange="toggleClassicValue(\'' + field + '\', this.value)"> ' + sanitize(values[i]) + '</label>';
+  }
+  h += '</div></div></div>';
+  return h;
+}
+function toggleClassicDropdown(ev, field) {
+  if (ev) ev.stopPropagation();
+  var dd = document.getElementById('smfdd-' + field);
+  if (!dd) return;
+  var willOpen = dd.style.display === 'none';
+  document.querySelectorAll('.tableau-col-dd').forEach(function(d) { d.style.display = 'none'; });
+  if (willOpen) {
+    var btn = document.getElementById('smfbtn-' + field);
+    if (btn) {
+      var r = btn.getBoundingClientRect();
+      var left = Math.min(r.left, window.innerWidth - 248);
+      dd.style.left = Math.max(8, left) + 'px';
+      dd.style.top = (r.bottom + 2) + 'px';
+      dd.style.width = Math.max(r.width, 200) + 'px';
+    }
+    dd.style.display = 'block';
+    var s = dd.querySelector('.tableau-col-dd-search');
+    if (s) { s.value = ''; filterClassicDropdownSearch(field, ''); s.focus(); }
+    setTimeout(function() {
+      document.addEventListener('mousedown', function closeDD(e) {
+        var box = document.getElementById('smfdd-' + field);
+        var b2 = document.getElementById('smfbtn-' + field);
+        if (box && !box.contains(e.target) && e.target !== b2) { box.style.display = 'none'; document.removeEventListener('mousedown', closeDD); }
+      });
+    }, 0);
+  }
+}
+function toggleClassicValue(field, value) {
+  var arr = classicMultiFilters[field] || (classicMultiFilters[field] = []);
+  var i = arr.indexOf(value);
+  if (i === -1) arr.push(value); else arr.splice(i, 1);
+  var btn = document.getElementById('smfbtn-' + field);
+  if (btn) { btn.querySelector('span').textContent = classicBtnLabel(field); btn.classList.toggle('active', arr.length > 0); }
+  doSearch();
+}
+function filterClassicDropdownSearch(field, q) {
+  var dd = document.getElementById('smfdd-' + field);
+  if (!dd) return;
+  q = (q || '').toLowerCase().trim();
+  dd.querySelectorAll('.tableau-col-dd-opt').forEach(function(lbl) {
+    var txt = (lbl.textContent || '').toLowerCase();
+    lbl.style.display = (!q || txt.indexOf(q) !== -1) ? '' : 'none';
+  });
+}
+function clearClassicFilter(field) {
+  classicMultiFilters[field] = [];
+  var dd = document.getElementById('smfdd-' + field);
+  if (dd) dd.querySelectorAll('input[type="checkbox"]').forEach(function(c) { c.checked = false; });
+  var btn = document.getElementById('smfbtn-' + field);
+  if (btn) { btn.querySelector('span').textContent = classicBtnLabel(field); btn.classList.remove('active'); }
+  doSearch();
+}
+
 function renderClassicSearch() {
   var communes = getUniqueValues('Commune');
   var mouvements = getUniqueValues('Mouvement');
@@ -637,20 +715,12 @@ function renderClassicSearch() {
   var html = '';
   html += '<div class="search-grid">';
   html += '<div class="search-field"><label>Référence DDC</label><input type="text" id="s-ref" placeholder="Ex: ECH 69389 22 00001" oninput="doSearch()" /></div>';
-  html += '<div class="search-field"><label>Commune</label><select id="s-commune" onchange="doSearch()"><option value="">' + t('allCommunes') + '</option>';
-  for (var i = 0; i < communes.length; i++) html += '<option value="' + sanitize(communes[i]) + '">' + sanitize(communes[i]) + '</option>';
-  html += '</select></div>';
-  html += '<div class="search-field"><label>Mouvement</label><select id="s-mouvement" onchange="doSearch()"><option value="">' + t('allMovements') + '</option>';
-  for (var i = 0; i < mouvements.length; i++) html += '<option value="' + sanitize(mouvements[i]) + '">' + sanitize(mouvements[i]) + '</option>';
-  html += '</select></div>';
+  html += classicMultiField('Commune', 'Commune', communes);
+  html += classicMultiField('Mouvement', 'Mouvement', mouvements);
   html += '<div class="search-field"><label>Adresse</label><input type="text" id="s-adresse" placeholder="Ex: LA JACQUIERE" oninput="doSearch()" /></div>';
   html += '<div class="search-field"><label>Réf. Parcelle</label><input type="text" id="s-parcelle" oninput="doSearch()" /></div>';
-  html += '<div class="search-field"><label>Type de Bien</label><select id="s-type" onchange="doSearch()"><option value="">' + t('allTypes') + '</option>';
-  for (var i = 0; i < types.length; i++) html += '<option value="' + sanitize(types[i]) + '">' + sanitize(types[i]) + '</option>';
-  html += '</select></div>';
-  html += '<div class="search-field"><label>Année</label><select id="s-annee" onchange="doSearch()"><option value="">' + t('allYears') + '</option>';
-  for (var i = 0; i < annees.length; i++) html += '<option value="' + sanitize(annees[i]) + '">' + sanitize(annees[i]) + '</option>';
-  html += '</select></div>';
+  html += classicMultiField('Type de Bien', 'Type_Bien', types);
+  html += classicMultiField('Année', 'Annee', annees);
   html += '<div class="search-field"><label>N° Site</label><input type="text" id="s-site" oninput="doSearch()" /></div>';
   html += '</div>';
 
@@ -1207,22 +1277,22 @@ function generateRapportPDF() {
 
 function doSearch() {
   var ref = (document.getElementById('s-ref') ? document.getElementById('s-ref').value : '').trim().toLowerCase();
-  var commune = (document.getElementById('s-commune') ? document.getElementById('s-commune').value : '');
-  var mouvement = (document.getElementById('s-mouvement') ? document.getElementById('s-mouvement').value : '');
   var adresse = (document.getElementById('s-adresse') ? document.getElementById('s-adresse').value : '').trim().toLowerCase();
   var parcelle = (document.getElementById('s-parcelle') ? document.getElementById('s-parcelle').value : '').trim().toLowerCase();
-  var type = (document.getElementById('s-type') ? document.getElementById('s-type').value : '');
-  var annee = (document.getElementById('s-annee') ? document.getElementById('s-annee').value : '');
   var site = (document.getElementById('s-site') ? document.getElementById('s-site').value : '').trim().toLowerCase();
+  var fCommune = classicMultiFilters.Commune || [];
+  var fMouvement = classicMultiFilters.Mouvement || [];
+  var fType = classicMultiFilters.Type_Bien || [];
+  var fAnnee = classicMultiFilters.Annee || [];
 
   searchResults = biens.filter(function(b) {
     if (ref && String(b.Reference_DDC || '').toLowerCase().indexOf(ref) === -1) return false;
-    if (commune && standardiserCommune(b.Commune) !== commune) return false;
-    if (mouvement && standardiserMouvement(b.Mouvement) !== mouvement) return false;
+    if (fCommune.length && fCommune.indexOf(standardiserCommune(b.Commune)) === -1) return false;
+    if (fMouvement.length && fMouvement.indexOf(standardiserMouvement(b.Mouvement)) === -1) return false;
     if (adresse && String(b.Adresse || '').toLowerCase().indexOf(adresse) === -1) return false;
     if (parcelle && String(b.Ref_Parcelles || '').toLowerCase().indexOf(parcelle) === -1) return false;
-    if (type && standardiserTypeBien(b.Type_Bien) !== type) return false;
-    if (annee && String(b.Annee) !== annee) return false;
+    if (fType.length && fType.indexOf(standardiserTypeBien(b.Type_Bien)) === -1) return false;
+    if (fAnnee.length && fAnnee.indexOf(String(b.Annee)) === -1) return false;
     if (site && String(b.Num_Site || '').toLowerCase().indexOf(site) === -1) return false;
     return true;
   });
@@ -1247,14 +1317,15 @@ function doSearch() {
 }
 
 function resetSearch() {
-  var ids = ['s-ref', 's-commune', 's-mouvement', 's-adresse', 's-parcelle', 's-type', 's-annee', 's-site'];
+  var ids = ['s-ref', 's-adresse', 's-parcelle', 's-site'];
   for (var i = 0; i < ids.length; i++) {
     var el = document.getElementById(ids[i]);
     if (el) el.value = '';
   }
+  classicMultiFilters = { Commune: [], Mouvement: [], Type_Bien: [], Annee: [] };
   sortCol = '';
   sortDir = 'asc';
-  doSearch();
+  renderSearchView(); // re-render le formulaire (boutons réinitialisés) + relance doSearch
 }
 
 // =============================================================================

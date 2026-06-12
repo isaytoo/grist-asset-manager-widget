@@ -89,6 +89,9 @@
     .search-field input::placeholder { color: #cbd5e1; }
 
     .search-actions { display: flex; gap: 10px; justify-content: center; margin: 16px 0; flex-wrap: wrap; }
+    .search-multi-btn { width: 100%; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; text-align: left; cursor: pointer; font-size: 13px; color: #1e293b; display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+    .search-multi-btn:hover { border-color: #fca5a5; }
+    .search-multi-btn.active { border-color: #ef4444; color: #dc2626; font-weight: 700; background: #fef2f2; }
 
     /* ========== BUTTONS ========== */
     .btn { padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; transition: all .2s; }
@@ -448,7 +451,7 @@
   <!-- FAB -->
   <button class="fab" id="fab-add" onclick="openAddModal()" title="Ajouter un bien" style="display:none;">+</button>
 
-  <script src="widget.js?v=34"></script>
+  <script src="widget.js?v=35"></script>
   <footer style="position: fixed; bottom: 0; left: 0; right: 0; background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 4px 12px; font-size: 0.7em; color: #94a3b8; z-index: 1000;">
     <span>© 2026 Said Hamadou (SPI)</span>
   </footer>
