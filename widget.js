@@ -2655,7 +2655,10 @@ function buildPieChart(slices, size, unit) {
     var x2 = cx + (r - 4) * Math.cos(endAngle);
     var y2 = cy + (r - 4) * Math.sin(endAngle);
 
-    if (slices.length === 1) {
+    if (Math.abs(slices[i].value) <= 0) {
+      // Part nulle : ne rien dessiner (évite un chemin dégénéré)
+    } else if (slices.length === 1 || pct >= 0.9999) {
+      // Part à 100 % : cercle plein (un arc de 360° ne se dessine pas en SVG)
       svg += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (r - 4) + '" fill="' + slices[i].color + '" />';
     } else {
       svg += '<path d="M ' + cx + ' ' + cy + ' L ' + x1 + ' ' + y1 + ' A ' + (r - 4) + ' ' + (r - 4) + ' 0 ' + largeArc + ' 1 ' + x2 + ' ' + y2 + ' Z" fill="' + slices[i].color + '" />';
