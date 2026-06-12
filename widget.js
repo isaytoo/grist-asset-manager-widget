@@ -640,17 +640,17 @@ function classicBtnLabel(field) {
 }
 function classicMultiField(labelText, field, values) {
   var arr = classicMultiFilters[field] || [];
-  var h = '<div class="search-field"><label>' + labelText + '</label><div style="position:relative;">';
+  var h = '<div class="search-field" style="position:relative;"><label>' + labelText + '</label>';
   h += '<button type="button" class="search-multi-btn' + (arr.length ? ' active' : '') + '" id="smfbtn-' + field + '" onclick="toggleClassicDropdown(event,\'' + field + '\')"><span>' + sanitize(classicBtnLabel(field)) + '</span><span>▾</span></button>';
-  h += '<div class="tableau-col-dd" id="smfdd-' + field + '" style="display:none;" onmousedown="event.stopPropagation()">';
-  h += '<input type="text" class="tableau-col-dd-search" placeholder="' + (currentLang === 'fr' ? 'Rechercher...' : 'Search...') + '" oninput="filterClassicDropdownSearch(\'' + field + '\', this.value)" onclick="event.stopPropagation()">';
-  h += '<div class="tableau-col-dd-actions"><span onclick="clearClassicFilter(\'' + field + '\')">✕ ' + (currentLang === 'fr' ? 'Effacer' : 'Clear') + '</span></div>';
-  h += '<div class="tableau-col-dd-list">';
+  h += '<div class="smdd" id="smfdd-' + field + '" style="display:none;" onmousedown="event.stopPropagation()">';
+  h += '<input type="text" class="smdd-search" placeholder="' + (currentLang === 'fr' ? 'Rechercher...' : 'Search...') + '" oninput="filterClassicDropdownSearch(\'' + field + '\', this.value)" onclick="event.stopPropagation()">';
+  h += '<div class="smdd-actions"><span onclick="clearClassicFilter(\'' + field + '\')">✕ ' + (currentLang === 'fr' ? 'Effacer' : 'Clear') + '</span></div>';
+  h += '<div class="smdd-list">';
   for (var i = 0; i < values.length; i++) {
     var checked = arr.indexOf(values[i]) !== -1 ? ' checked' : '';
-    h += '<label class="tableau-col-dd-opt"><input type="checkbox" value="' + sanitize(values[i]) + '"' + checked + ' onchange="toggleClassicValue(\'' + field + '\', this.value)"> ' + sanitize(values[i]) + '</label>';
+    h += '<label class="smdd-opt"><input type="checkbox" value="' + sanitize(values[i]) + '"' + checked + ' onchange="toggleClassicValue(\'' + field + '\', this.value)"> <span>' + sanitize(values[i]) + '</span></label>';
   }
-  h += '</div></div></div></div>'; // list, dd, position:relative, search-field
+  h += '</div></div></div>'; // list, dd, search-field
   return h;
 }
 function toggleClassicDropdown(ev, field) {
@@ -658,18 +658,10 @@ function toggleClassicDropdown(ev, field) {
   var dd = document.getElementById('smfdd-' + field);
   if (!dd) return;
   var willOpen = dd.style.display === 'none';
-  document.querySelectorAll('.tableau-col-dd').forEach(function(d) { d.style.display = 'none'; });
+  document.querySelectorAll('.smdd').forEach(function(d) { d.style.display = 'none'; });
   if (willOpen) {
-    var btn = document.getElementById('smfbtn-' + field);
-    if (btn) {
-      var r = btn.getBoundingClientRect();
-      var left = Math.min(r.left, window.innerWidth - 248);
-      dd.style.left = Math.max(8, left) + 'px';
-      dd.style.top = (r.bottom + 2) + 'px';
-      dd.style.width = Math.max(r.width, 200) + 'px';
-    }
     dd.style.display = 'block';
-    var s = dd.querySelector('.tableau-col-dd-search');
+    var s = dd.querySelector('.smdd-search');
     if (s) { s.value = ''; filterClassicDropdownSearch(field, ''); s.focus(); }
     setTimeout(function() {
       document.addEventListener('mousedown', function closeDD(e) {
@@ -692,7 +684,7 @@ function filterClassicDropdownSearch(field, q) {
   var dd = document.getElementById('smfdd-' + field);
   if (!dd) return;
   q = (q || '').toLowerCase().trim();
-  dd.querySelectorAll('.tableau-col-dd-opt').forEach(function(lbl) {
+  dd.querySelectorAll('.smdd-opt').forEach(function(lbl) {
     var txt = (lbl.textContent || '').toLowerCase();
     lbl.style.display = (!q || txt.indexOf(q) !== -1) ? '' : 'none';
   });
