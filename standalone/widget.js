@@ -1781,7 +1781,7 @@ function openEditModal(bienId) {
   html += buildFormHtml(b);
   html += '</div>';
   html += '<div class="modal-footer">';
-  html += '<button class="btn btn-danger" onclick="openDeleteConfirmModal(biens.find(function(x){return x.id===' + b.id + '}))">🗑️ ' + t('delete') + '</button>';
+  // Bouton Supprimer retiré volontairement : la suppression se fait via l'onglet dédié.
   html += '<div style="display:flex;gap:8px;">';
   html += '<button class="btn btn-secondary" onclick="closeModalForce()">❌ ' + t('cancel') + '</button>';
   html += '<button class="btn btn-success" onclick="saveBien(' + b.id + ')">💾 ' + t('save') + '</button>';
