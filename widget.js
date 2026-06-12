@@ -1006,7 +1006,6 @@ function generateRapportPDF() {
     { header: 'Jouissance Différée', field: 'Jouissance_Differee', width: 18 },
     { header: 'Temps Portage (ans)', field: 'Temps_Portage', width: 18 },
     { header: 'Bail Longue Durée', field: 'Bail_Longue_Duree', width: 18 },
-    { header: 'Acquisition Compte Tiers', field: 'Acquisition_Compte_Tiers', width: 18 },
     { header: 'Préfinancement', field: 'Prefinancement', width: 18 },
     { header: 'Tiers Vendeur/Acquéreur', field: 'Tiers_Vendeur_Acquereur', width: 30 },
     { header: 'Dossier', field: 'Dossier_Numerique', width: 16 },
