@@ -742,8 +742,12 @@ function cssColorToRgb(c) {
 function firstHtmlColor(html) {
   if (!html) return null;
   var s = String(html);
-  var m = s.match(/color\s*:\s*([^;"'}]+)/i) || s.match(/<font[^>]*\bcolor\s*=\s*["']?([^"'>\s]+)/i);
-  return m ? cssColorToRgb(m[1]) : null;
+  // Ne matcher que "color:" et PAS "background-color:" (sinon on récupère le fond, souvent
+  // blanc → texte invisible dans le PDF).
+  var m = s.match(/(?:^|[;"'{\s])color\s*:\s*([^;"'}]+)/i) || s.match(/<font[^>]*\bcolor\s*=\s*["']?([^"'>\s]+)/i);
+  var rgb = m ? cssColorToRgb(m[1]) : null;
+  if (rgb && rgb[0] > 240 && rgb[1] > 240 && rgb[2] > 240) return null;
+  return rgb;
 }
 
 function generateRapportPDF() {

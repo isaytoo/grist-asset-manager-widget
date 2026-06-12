@@ -807,8 +807,13 @@ function cssColorToRgb(c) {
 function firstHtmlColor(html) {
   if (!html) return null;
   var s = String(html);
-  var m = s.match(/color\s*:\s*([^;"'}]+)/i) || s.match(/<font[^>]*\bcolor\s*=\s*["']?([^"'>\s]+)/i);
-  return m ? cssColorToRgb(m[1]) : null;
+  // Ne matcher que "color:" et PAS "background-color:" (qui contient aussi la sous-chaîne
+  // "color:") — sinon on récupérait le fond (souvent blanc) → texte invisible dans le PDF.
+  var m = s.match(/(?:^|[;"'{\s])color\s*:\s*([^;"'}]+)/i) || s.match(/<font[^>]*\bcolor\s*=\s*["']?([^"'>\s]+)/i);
+  var rgb = m ? cssColorToRgb(m[1]) : null;
+  // Sécurité : ignorer le blanc/quasi-blanc (illisible sur le fond blanc du PDF)
+  if (rgb && rgb[0] > 240 && rgb[1] > 240 && rgb[2] > 240) return null;
+  return rgb;
 }
 
 function generateRapportPDF() {
