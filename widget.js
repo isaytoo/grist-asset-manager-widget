@@ -650,7 +650,7 @@ function classicMultiField(labelText, field, values) {
     var checked = arr.indexOf(values[i]) !== -1 ? ' checked' : '';
     h += '<label class="tableau-col-dd-opt"><input type="checkbox" value="' + sanitize(values[i]) + '"' + checked + ' onchange="toggleClassicValue(\'' + field + '\', this.value)"> ' + sanitize(values[i]) + '</label>';
   }
-  h += '</div></div></div>';
+  h += '</div></div></div></div>'; // list, dd, position:relative, search-field
   return h;
 }
 function toggleClassicDropdown(ev, field) {
