@@ -816,6 +816,62 @@ function firstHtmlColor(html) {
   return rgb;
 }
 
+// Découpe du HTML riche en segments { text, color:[r,g,b]|null, bold } pour un rendu
+// multi-couleurs dans le PDF (seule la partie colorée est colorée, pas tout le paragraphe).
+function parseRichRuns(html) {
+  function nearWhite(c) { return c && c[0] > 240 && c[1] > 240 && c[2] > 240; }
+  var div = document.createElement('div');
+  div.innerHTML = String(html == null ? '' : html);
+  var runs = [];
+  function walk(node, color, bold) {
+    for (var i = 0; i < node.childNodes.length; i++) {
+      var ch = node.childNodes[i];
+      if (ch.nodeType === 3) {
+        var txt = (ch.nodeValue || '').replace(/\xA0/g, ' ');
+        if (txt) runs.push({ text: txt, color: color, bold: bold });
+      } else if (ch.nodeType === 1) {
+        var nColor = color, nBold = bold, tag = ch.tagName;
+        if (ch.style && ch.style.color) { var cc = cssColorToRgb(ch.style.color); if (cc && !nearWhite(cc)) nColor = cc; }
+        if (tag === 'FONT' && ch.getAttribute('color')) { var fc = cssColorToRgb(ch.getAttribute('color')); if (fc && !nearWhite(fc)) nColor = fc; }
+        if (tag === 'B' || tag === 'STRONG') nBold = true;
+        if (ch.style && (ch.style.fontWeight === 'bold' || parseInt(ch.style.fontWeight, 10) >= 600)) nBold = true;
+        if (tag === 'BR') { runs.push({ text: '\n', color: nColor, bold: nBold }); continue; }
+        walk(ch, nColor, nBold);
+        if (tag === 'P' || tag === 'DIV' || tag === 'LI') runs.push({ text: '\n', color: nColor, bold: nBold });
+      }
+    }
+  }
+  walk(div, null, false);
+  while (runs.length && runs[runs.length - 1].text === '\n') runs.pop();
+  return runs;
+}
+// Découpe les segments en lignes qui tiennent dans maxWidth (gère gras + retours à la ligne)
+function wrapRichRuns(doc, runs, maxWidth, fontSize) {
+  doc.setFontSize(fontSize);
+  var lines = [[]];
+  function lineWidth(ln) { var w = 0; for (var i = 0; i < ln.length; i++) { doc.setFont('helvetica', ln[i].bold ? 'bold' : 'normal'); w += doc.getTextWidth(ln[i].text); } return w; }
+  runs.forEach(function(run) {
+    var parts = run.text.split('\n');
+    for (var pi = 0; pi < parts.length; pi++) {
+      if (pi > 0) lines.push([]);
+      var words = parts[pi].match(/\s+|\S+/g) || [];
+      words.forEach(function(w) {
+        doc.setFont('helvetica', run.bold ? 'bold' : 'normal');
+        var ww = doc.getTextWidth(w);
+        var cur = lines[lines.length - 1];
+        if (cur.length > 0 && lineWidth(cur) + ww > maxWidth) {
+          if (/^\s+$/.test(w)) lines.push([]);
+          else lines.push([{ text: w, color: run.color, bold: run.bold }]);
+        } else {
+          cur.push({ text: w, color: run.color, bold: run.bold });
+        }
+      });
+    }
+  });
+  lines.forEach(function(ln) { while (ln.length && /^\s+$/.test(ln[0].text)) ln.shift(); });
+  return lines.length ? lines : [[]];
+}
+
 function generateRapportPDF() {
   var dateDebutEl = document.getElementById('rapport-date-debut');
   var dateFinEl = document.getElementById('rapport-date-fin');
@@ -986,19 +1042,18 @@ function generateRapportPDF() {
     for (var b = 0; b < groupBiens.length; b++) {
       var bien = groupBiens[b];
       var row = [];
-      var colColors = {}; // index colonne -> couleur de texte détectée (champs riches)
+      var richRuns = {}; // index colonne -> segments riches (texte + couleur + gras)
       for (var c = 0; c < pdfCols.length; c++) {
         var field = pdfCols[c].field;
         var raw = bien[field];
         if (HTML_RICH_COLS[field]) {
-          var col = firstHtmlColor(raw);
-          if (col) colColors[c] = col;
-          row.push(richToPlain(raw));
+          richRuns[c] = parseRichRuns(raw);
+          row.push(richToPlain(raw)); // texte de repli (le rendu coloré se fait manuellement)
         } else {
           row.push(raw != null ? String(raw) : '');
         }
       }
-      tableBody.push({ _isGroupHeader: false, _cells: row, _mouvement: bien.Mouvement, _colColors: colColors });
+      tableBody.push({ _isGroupHeader: false, _cells: row, _mouvement: bien.Mouvement, _richRuns: richRuns });
     }
   }
 
@@ -1056,12 +1111,47 @@ function generateRapportPDF() {
             data.cell.styles.fontStyle = 'bold';
             data.cell.styles.halign = 'center';
           }
-          // Champs riches (Nature/Observation) : appliquer la couleur de texte saisie
-          if (rowData._colColors && rowData._colColors[data.column.index]) {
-            data.cell.styles.textColor = rowData._colColors[data.column.index];
+          // Champs riches (Nature/Observation) : rendu multi-couleurs manuel (didDrawCell).
+          // On calcule ici les lignes pour fixer la hauteur, et on vide le texte autoTable.
+          var idx = data.column.index;
+          if (rowData._richRuns && rowData._richRuns[idx] && rowData._richRuns[idx].length) {
+            var pad = 1.5;
+            var maxW = (pdfCols[idx].width || 50) - pad * 2;
+            var lines = wrapRichRuns(doc, rowData._richRuns[idx], maxW, data.cell.styles.fontSize);
+            rowData._richLines = rowData._richLines || {};
+            rowData._richLines[idx] = lines;
+            data.cell.text = ['']; // autoTable ne dessine rien, on dessine nous-mêmes
+            var lineH = data.cell.styles.fontSize * 1.15 / doc.internal.scaleFactor;
+            data.cell.styles.minCellHeight = Math.max(data.cell.styles.minCellHeight || 0, lines.length * lineH + pad * 2);
           }
         }
       }
+    },
+    didDrawCell: function(data) {
+      if (data.section !== 'body') return;
+      var ri = (data.row && typeof data.row.index === 'number') ? data.row.index : data.row;
+      var rowData = tableBody[ri];
+      var idx = data.column.index;
+      if (!rowData || !rowData._richLines || !rowData._richLines[idx]) return;
+      var lines = rowData._richLines[idx];
+      var fs = data.cell.styles.fontSize, sf = doc.internal.scaleFactor;
+      var lineH = fs * 1.15 / sf, pad = 1.5;
+      var x0 = data.cell.x + pad;
+      var y = data.cell.y + pad + fs / sf; // ligne de base de la 1re ligne
+      doc.setFontSize(fs);
+      lines.forEach(function(ln) {
+        var x = x0;
+        ln.forEach(function(seg) {
+          var c = seg.color || [15, 23, 42];
+          doc.setFont('helvetica', seg.bold ? 'bold' : 'normal');
+          doc.setTextColor(c[0], c[1], c[2]);
+          doc.text(seg.text, x, y);
+          x += doc.getTextWidth(seg.text);
+        });
+        y += lineH;
+      });
+      doc.setTextColor(0, 0, 0);
+      doc.setFont('helvetica', 'normal');
     },
     didDrawPage: function(data) {
       // Footer with page number
