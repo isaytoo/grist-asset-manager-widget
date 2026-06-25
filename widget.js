@@ -1172,6 +1172,16 @@ function generateRapportPDF() {
             data.cell.styles.fontStyle = 'bold';
             data.cell.styles.halign = 'center';
           }
+          // Cellule Gestion SPI : fond vert quand la valeur est « OUI »
+          if (pdfCols[data.column.index] && pdfCols[data.column.index].field === 'Gestion_SPI') {
+            var spiCell = String(rowData._cells[data.column.index] != null ? rowData._cells[data.column.index] : '').trim().toUpperCase();
+            if (spiCell === 'OUI') {
+              data.cell.styles.fillColor = [34, 197, 94];
+              data.cell.styles.textColor = [255, 255, 255];
+              data.cell.styles.fontStyle = 'bold';
+              data.cell.styles.halign = 'center';
+            }
+          }
           // Champs riches (Nature/Observation) : rendu multi-couleurs manuel (didDrawCell).
           // On calcule ici les lignes pour fixer la hauteur, et on vide le texte autoTable.
           var idx = data.column.index;
