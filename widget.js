@@ -698,6 +698,24 @@ function clearClassicFilter(field) {
   doSearch();
 }
 
+// --- Recherche par mots-clés dans les champs riches (Nature du bien / Observations) ---
+// Convertit le HTML Jodit en texte brut (balises retirées, entités décodées)
+function stripHtmlToText(v) {
+  var s = String(v == null ? '' : v);
+  if (s.indexOf('<') === -1 && s.indexOf('&') === -1) return s;
+  var d = document.createElement('div'); d.innerHTML = s;
+  return d.textContent || d.innerText || '';
+}
+// Normalise pour la recherche : minuscules + accents retirés
+function normSearchText(s) {
+  return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+// Texte cherchable d'un bien (Nature + Observations), mis en cache sur l'objet
+function bienFullText(b) {
+  if (b._ftext == null) b._ftext = normSearchText(stripHtmlToText(b.Nature_Bien) + ' ' + stripHtmlToText(b.Observation));
+  return b._ftext;
+}
+
 function renderClassicSearch() {
   var communes = getUniqueValues('Commune');
   var mouvements = getUniqueValues('Mouvement');
@@ -714,6 +732,7 @@ function renderClassicSearch() {
   html += classicMultiField('Type de Bien', 'Type_Bien', types);
   html += classicMultiField('Année', 'Annee', annees);
   html += '<div class="search-field"><label>N° Site</label><input type="text" id="s-site" oninput="doSearch()" /></div>';
+  html += '<div class="search-field" style="grid-column:span 2;"><label>🔎 ' + (currentLang === 'fr' ? 'Mots-clés (Nature du bien / Observations)' : 'Keywords (Property Nature / Observations)') + '</label><input type="text" id="s-motscles" placeholder="' + (currentLang === 'fr' ? 'Ex : hangar servitude amiante — tous les mots doivent apparaître' : 'E.g.: warehouse easement — all words must appear') + '" oninput="doSearch()" /></div>';
   html += '</div>';
 
   html += '<div class="search-actions">';
@@ -1281,6 +1300,8 @@ function doSearch() {
   var adresse = (document.getElementById('s-adresse') ? document.getElementById('s-adresse').value : '').trim().toLowerCase();
   var parcelle = (document.getElementById('s-parcelle') ? document.getElementById('s-parcelle').value : '').trim().toLowerCase();
   var site = (document.getElementById('s-site') ? document.getElementById('s-site').value : '').trim().toLowerCase();
+  var motsRaw = (document.getElementById('s-motscles') ? document.getElementById('s-motscles').value : '').trim();
+  var motsList = motsRaw ? normSearchText(motsRaw).split(/\s+/).filter(Boolean) : [];
   var fCommune = classicMultiFilters.Commune || [];
   var fMouvement = classicMultiFilters.Mouvement || [];
   var fType = classicMultiFilters.Type_Bien || [];
@@ -1295,6 +1316,10 @@ function doSearch() {
     if (fType.length && fType.indexOf(standardiserTypeBien(b.Type_Bien)) === -1) return false;
     if (fAnnee.length && fAnnee.indexOf(String(b.Annee)) === -1) return false;
     if (site && String(b.Num_Site || '').toLowerCase().indexOf(site) === -1) return false;
+    if (motsList.length) {
+      var ftext = bienFullText(b);
+      for (var mi = 0; mi < motsList.length; mi++) if (ftext.indexOf(motsList[mi]) === -1) return false;
+    }
     return true;
   });
 
@@ -1318,7 +1343,7 @@ function doSearch() {
 }
 
 function resetSearch() {
-  var ids = ['s-ref', 's-adresse', 's-parcelle', 's-site'];
+  var ids = ['s-ref', 's-adresse', 's-parcelle', 's-site', 's-motscles'];
   for (var i = 0; i < ids.length; i++) {
     var el = document.getElementById(ids[i]);
     if (el) el.value = '';
