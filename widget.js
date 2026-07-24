@@ -2073,7 +2073,7 @@ function openDetailModal(bienId, showManageButtons) {
   html += '<div class="detail-grid-3">';
   html += detailCard('Référence Cart@DS', dv('Reference_DDC'));
   html += detailCard('ID Unique', sanitize(String(b.id || '')));
-  html += detailCard('Gestion SPI', (String(b.Gestion_SPI || '').toUpperCase() === 'OUI' ? 'OUI' : 'NON'));
+  html += detailCard('Tiers Vendeur ou Acquéreur', dv('Tiers_Vendeur_Acquereur'));
   html += '</div>';
   html += '<div class="detail-grid-1">';
   html += detailCard('Nom de l\'OFA / OFT', dv('Nom_OFA_OFT'));
@@ -2085,6 +2085,7 @@ function openDetailModal(bienId, showManageButtons) {
   html += '<h4 class="detail-section-title"><span>🔄</span> Mouvement</h4>';
   html += '<div class="detail-section-line"></div>';
   html += '<div class="detail-grid-3">';
+  html += detailCard('Gestion SPI', (String(b.Gestion_SPI || '').toUpperCase() === 'OUI' ? 'OUI' : 'NON'));
   html += detailCard('Type de Mouvement', dv('Mouvement'));
   html += detailCard('Date de l\'Acte', dv('Date_Acte'));
   html += detailCard('Année', dv('Annee'));
@@ -2130,7 +2131,7 @@ function openDetailModal(bienId, showManageButtons) {
   html += '</div>';
   html += '</div>';
 
-  // Section: Acquisition et Financement
+  // Section: Financement
   html += '<div class="detail-section">';
   html += '<h4 class="detail-section-title"><span>💰</span> Financement</h4>';
   html += '<div class="detail-section-line"></div>';
@@ -2140,7 +2141,6 @@ function openDetailModal(bienId, showManageButtons) {
     html += detailCard('Acquisition Compte Tiers', dv('Acquisition_Compte_Tiers'));
   }
   html += detailCard('Préfinancement', dv('Prefinancement'));
-  html += detailCard('Tiers Vendeur ou Acquéreur', dv('Tiers_Vendeur_Acquereur'));
   html += '</div>';
   html += '</div>';
 
