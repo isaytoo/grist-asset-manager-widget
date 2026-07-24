@@ -34,7 +34,7 @@ var searchFiltersCollapsed = (typeof localStorage !== 'undefined' && localStorag
 
 // Column definitions for BM_Biens
 var BIEN_COLUMNS = [
-  { id: 'Reference_DDC', label_fr: 'Référence DDC', label_en: 'DDC Reference', type: 'Text' },
+  { id: 'Reference_DDC', label_fr: 'Référence Cart@DS', label_en: 'Cart@DS Reference', type: 'Text' },
   { id: 'Gestion_SPI', label_fr: 'Gestion SPI', label_en: 'SPI Management', type: 'Text' },
   { id: 'Nom_OFA_OFT', label_fr: 'Nom OFA / OFT', label_en: 'OFA / OFT Name', type: 'Text' },
   { id: 'Mouvement', label_fr: 'Mouvement', label_en: 'Movement', type: 'Text' },
@@ -95,12 +95,12 @@ var i18n = {
     addDesc: 'Créez un nouveau bien patrimonial avec toutes ses caractéristiques (localisation, surfaces, mouvement, etc.)',
     addBtn: 'Ajouter un bien',
     editTitle: 'Actualiser un Bien',
-    editDesc: "Modifiez les informations d'un bien existant en saisissant sa référence DDC",
+    editDesc: "Modifiez les informations d'un bien existant en saisissant sa référence Cart@DS",
     editBtn: 'Rechercher et modifier',
     deleteTitle: 'Supprimer un Bien',
-    deleteDesc: 'Supprimez définitivement un bien en saisissant sa référence DDC',
+    deleteDesc: 'Supprimez définitivement un bien en saisissant sa référence Cart@DS',
     deleteBtn: 'Rechercher et supprimer',
-    refPlaceholder: 'Référence DDC (ex: ECH 69389 22 00001)',
+    refPlaceholder: 'Référence Cart@DS (ex: ECH 69389 22 00001)',
     modalAdd: 'Ajouter un nouveau bien',
     modalEdit: 'Modifier le bien',
     modalDetail: 'Détails du bien',
@@ -121,7 +121,7 @@ var i18n = {
     sectionLocalisation: 'Localisation',
     sectionCaracteristiques: 'Caractéristiques du Bien',
     sectionOccupation: 'Occupation et Jouissance',
-    sectionFinancement: 'Acquisition et Financement',
+    sectionFinancement: 'Financement',
     sectionGIMA: 'Gestion GIMA',
     sectionNature: 'Nature du Bien et Observations',
     select: 'Sélectionner',
@@ -178,7 +178,7 @@ var i18n = {
     importAppend: 'Ajouter uniquement',
     importAppendDesc: 'Ajoute les nouvelles lignes sans toucher aux existantes',
     importUpdate: 'Mettre à jour',
-    importUpdateDesc: 'Met à jour les biens existants (par Réf DDC) et ajoute les nouveaux',
+    importUpdateDesc: 'Met à jour les biens existants (par Réf Cart@DS) et ajoute les nouveaux',
     importBtn: 'Lancer l\'import',
     importPreview: 'Aperçu des données',
     importRows: 'lignes détectées',
@@ -218,12 +218,12 @@ var i18n = {
     addDesc: 'Create a new real estate asset with all its characteristics (location, areas, movement, etc.)',
     addBtn: 'Add an asset',
     editTitle: 'Update an Asset',
-    editDesc: 'Edit an existing asset by entering its DDC reference',
+    editDesc: 'Edit an existing asset by entering its Cart@DS reference',
     editBtn: 'Search and edit',
     deleteTitle: 'Delete an Asset',
-    deleteDesc: 'Permanently delete an asset by entering its DDC reference',
+    deleteDesc: 'Permanently delete an asset by entering its Cart@DS reference',
     deleteBtn: 'Search and delete',
-    refPlaceholder: 'DDC Reference (e.g. ECH 69389 22 00001)',
+    refPlaceholder: 'Cart@DS Reference (e.g. ECH 69389 22 00001)',
     modalAdd: 'Add a new asset',
     modalEdit: 'Edit asset',
     modalDetail: 'Asset details',
@@ -244,7 +244,7 @@ var i18n = {
     sectionLocalisation: 'Location',
     sectionCaracteristiques: 'Asset Characteristics',
     sectionOccupation: 'Occupation and Enjoyment',
-    sectionFinancement: 'Acquisition and Financing',
+    sectionFinancement: 'Financing',
     sectionGIMA: 'GIMA Management',
     sectionNature: 'Property Nature and Observations',
     select: 'Select',
@@ -301,7 +301,7 @@ var i18n = {
     importAppend: 'Append only',
     importAppendDesc: 'Adds new rows without touching existing ones',
     importUpdate: 'Update',
-    importUpdateDesc: 'Updates existing assets (by DDC Ref) and adds new ones',
+    importUpdateDesc: 'Updates existing assets (by Cart@DS Ref) and adds new ones',
     importBtn: 'Start import',
     importPreview: 'Data preview',
     importRows: 'rows detected',
@@ -724,7 +724,7 @@ function renderClassicSearch() {
 
   var html = '';
   html += '<div class="search-grid">';
-  html += '<div class="search-field"><label>Référence DDC</label><input type="text" id="s-ref" placeholder="Ex: ECH 69389 22 00001" oninput="doSearch()" /></div>';
+  html += '<div class="search-field"><label>Référence Cart@DS</label><input type="text" id="s-ref" placeholder="Ex: ECH 69389 22 00001" oninput="doSearch()" /></div>';
   html += classicMultiField('Commune', 'Commune', communes);
   html += classicMultiField('Mouvement', 'Mouvement', mouvements);
   html += '<div class="search-field"><label>Adresse</label><input type="text" id="s-adresse" placeholder="Ex: LA JACQUIERE" oninput="doSearch()" /></div>';
@@ -1029,7 +1029,7 @@ function generateRapportPDF() {
     { header: 'Tiers Vendeur/Acquéreur', field: 'Tiers_Vendeur_Acquereur', width: 30 },
     { header: 'Dossier', field: 'Dossier_Numerique', width: 16 },
     { header: 'Observations', field: 'Observation', width: 60 },
-    { header: 'Référence DDC', field: 'Reference_DDC', width: 32 },
+    { header: 'Référence Cart@DS', field: 'Reference_DDC', width: 32 },
     { header: 'Nom OFA', field: 'Nom_OFA_OFT', width: 22 }
   ];
 
@@ -1417,7 +1417,7 @@ function renderTableauSearch() {
   var annees = getUniqueValues('Annee').sort(function(a, b) { return b - a; });
 
   var html = '<div class="search-grid">';
-  html += '<div class="search-field"><label>Référence DDC</label><input type="text" id="t-ref" placeholder="Ex: ECH 69389 22 00001" oninput="doTableauSearch()" /></div>';
+  html += '<div class="search-field"><label>Référence Cart@DS</label><input type="text" id="t-ref" placeholder="Ex: ECH 69389 22 00001" oninput="doTableauSearch()" /></div>';
   html += '<div class="search-field"><label>Commune</label><select id="t-commune" onchange="doTableauSearch()"><option value="">' + t('allCommunes') + '</option>';
   for (var i = 0; i < communes.length; i++) html += '<option value="' + sanitize(communes[i]) + '">' + sanitize(communes[i]) + '</option>';
   html += '</select></div>';
@@ -2071,7 +2071,7 @@ function openDetailModal(bienId, showManageButtons) {
   html += '<h4 class="detail-section-title"><span>📁</span> Identification</h4>';
   html += '<div class="detail-section-line"></div>';
   html += '<div class="detail-grid-3">';
-  html += detailCard('Référence DDC', dv('Reference_DDC'));
+  html += detailCard('Référence Cart@DS', dv('Reference_DDC'));
   html += detailCard('ID Unique', sanitize(String(b.id || '')));
   html += detailCard('Gestion SPI', (String(b.Gestion_SPI || '').toUpperCase() === 'OUI' ? 'OUI' : 'NON'));
   html += '</div>';
@@ -2132,7 +2132,7 @@ function openDetailModal(bienId, showManageButtons) {
 
   // Section: Acquisition et Financement
   html += '<div class="detail-section">';
-  html += '<h4 class="detail-section-title"><span>💰</span> Acquisition et Financement</h4>';
+  html += '<h4 class="detail-section-title"><span>💰</span> Financement</h4>';
   html += '<div class="detail-section-line"></div>';
   html += '<div class="detail-grid-3">';
   // Acquisition Compte Tiers : masqué s'il est vide (comme à l'ajout) ; visible si renseigné (anciens biens)
@@ -2304,7 +2304,7 @@ function openDeleteConfirmModal(bien) {
   // Asset details card
   html += '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:16px;text-align:left;margin-bottom:20px;">';
   html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
-  html += '<div><span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;">Réf. DDC</span><br/><span style="font-weight:700;color:#1e293b;">' + sanitize(bien.Reference_DDC) + '</span></div>';
+  html += '<div><span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;">Réf. Cart@DS</span><br/><span style="font-weight:700;color:#1e293b;">' + sanitize(bien.Reference_DDC) + '</span></div>';
   html += '<div><span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;">' + t('tabSearch') + '</span><br/>' + movementBadge(bien.Mouvement) + '</div>';
   html += '<div><span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;">Commune</span><br/><span style="font-weight:600;">' + sanitize(bien.Commune || '--') + '</span></div>';
   html += '<div><span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;">Adresse</span><br/><span style="font-weight:600;">' + sanitize(bien.Adresse || '--') + '</span></div>';
@@ -2396,16 +2396,17 @@ function buildFormHtml(bien) {
   // Section: Identification
   html += '<div class="form-section"><h4>📋 ' + t('sectionIdentification') + '</h4>';
   html += '<div class="form-grid">';
-  html += '<div class="form-group"><label>Référence DDC <span class="required">*</span></label><input type="text" id="f-Reference_DDC" value="' + v('Reference_DDC') + '" /></div>';
-  html += '<div class="form-group"><label>Gestion SPI</label>';
-  html += '<div class="radio-group"><label><input type="radio" name="f-Gestion_SPI" value="Non" ' + (v('Gestion_SPI') !== 'Oui' ? 'checked' : '') + ' /> NON</label>';
-  html += '<label><input type="radio" name="f-Gestion_SPI" value="Oui" ' + (v('Gestion_SPI') === 'Oui' ? 'checked' : '') + ' /> OUI</label></div></div>';
-  html += '<div class="form-group"><label>Nom OFA / OFT</label><input type="text" id="f-Nom_OFA_OFT" value="' + v('Nom_OFA_OFT') + '" /></div>';
+  html += '<div class="form-group"><label>Référence Cart@DS <span class="required">*</span></label><input type="text" id="f-Reference_DDC" value="' + v('Reference_DDC') + '" /></div>';
+  html += '<div class="form-group" style="grid-column: span 2;"><label>Nom OFA / OFT</label><input type="text" id="f-Nom_OFA_OFT" value="' + v('Nom_OFA_OFT') + '" /></div>';
+  html += '<div class="form-group"><label>Tiers Vendeur ou Acquéreur</label><input type="text" id="f-Tiers_Vendeur_Acquereur" value="' + v('Tiers_Vendeur_Acquereur') + '" /></div>';
   html += '</div></div>';
 
   // Section: Mouvement
   html += '<div class="form-section"><h4>🔄 ' + t('sectionMouvement') + '</h4>';
   html += '<div class="form-grid">';
+  html += '<div class="form-group"><label>Gestion SPI</label>';
+  html += '<div class="radio-group"><label><input type="radio" name="f-Gestion_SPI" value="Non" ' + (v('Gestion_SPI') !== 'Oui' ? 'checked' : '') + ' /> NON</label>';
+  html += '<label><input type="radio" name="f-Gestion_SPI" value="Oui" ' + (v('Gestion_SPI') === 'Oui' ? 'checked' : '') + ' /> OUI</label></div></div>';
   html += '<div class="form-group"><label>Type de Mouvement <span class="required">*</span></label><select id="f-Mouvement">';
   for (var i = 0; i < mouvementOptions.length; i++) {
     html += '<option value="' + mouvementOptions[i] + '"' + (selMatch(v('Mouvement'), mouvementOptions[i]) ? ' selected' : '') + '>' + (mouvementOptions[i] || t('select')) + '</option>';
@@ -2474,24 +2475,16 @@ function buildFormHtml(bien) {
   html += '</select></div>';
   html += '</div></div>';
 
-  // Section: Acquisition et Financement
+  // Section: Financement
   html += '<div class="form-section"><h4>💰 ' + t('sectionFinancement') + '</h4>';
   html += '<div class="form-grid">';
-  // Acquisition compte tiers : uniquement en modification (champ conservé pour les anciens
-  // enregistrements), masqué à l'ajout d'un nouveau bien.
-  if (isEdit) {
-    html += '<div class="form-group"><label>Acquisition compte tiers</label><select id="f-Acquisition_Compte_Tiers">';
-    for (var i = 0; i < acqCompteOptions.length; i++) {
-      html += '<option value="' + acqCompteOptions[i] + '"' + (selMatch(v('Acquisition_Compte_Tiers'), acqCompteOptions[i]) ? ' selected' : '') + '>' + (acqCompteOptions[i] || t('select')) + '</option>';
-    }
-    html += '</select></div>';
-  }
+  // « Acquisition compte tiers » n'est plus proposé à la saisie (ni à l'ajout ni en
+  // modification). Sa valeur existante reste conservée en base (voir getFormData).
   html += '<div class="form-group"><label>Préfinancement</label><select id="f-Prefinancement">';
   for (var i = 0; i < prefinancementOptions.length; i++) {
     html += '<option value="' + prefinancementOptions[i] + '"' + (selMatch(v('Prefinancement'), prefinancementOptions[i]) ? ' selected' : '') + '>' + (prefinancementOptions[i] || t('select')) + '</option>';
   }
   html += '</select></div>';
-  html += '<div class="form-group"><label>Tiers Vendeur ou Acquéreur</label><input type="text" id="f-Tiers_Vendeur_Acquereur" value="' + v('Tiers_Vendeur_Acquereur') + '" /></div>';
   html += '</div></div>';
 
   // Section: GIMA
@@ -2534,7 +2527,9 @@ function getFormData() {
       record[col.id] = window._joditObservation ? window._joditObservation.value : '';
     } else {
       var el = document.getElementById('f-' + col.id);
-      record[col.id] = el ? el.value.trim() : '';
+      // Champ absent du formulaire (ex. « Acquisition compte tiers » occulté) : on ne
+      // l'inclut pas dans le record pour préserver la valeur existante en base.
+      if (el) record[col.id] = el.value.trim();
     }
   }
   return record;
@@ -3208,7 +3203,7 @@ function buildDetailTable(rows, type) {
 
   var html = '<div style="max-height:500px;overflow:auto;">';
   html += '<table class="detail-table"><thead class="' + headClass + '"><tr>';
-  html += '<th>Référence DDC</th><th>Commune</th><th>Adresse</th>';
+  html += '<th>Référence Cart@DS</th><th>Commune</th><th>Adresse</th>';
   if (hasType) html += '<th>Type</th>';
   html += '<th>Mouvement</th><th>' + surfLabel + '</th><th>Date de l\'acte</th><th>Année</th>';
   html += '</tr></thead><tbody>';
@@ -3251,7 +3246,7 @@ function exportSurfaceDetails() {
     function makeSheet(rows, type) {
       var hasType = (type === 'acq' || type === 'ces');
       var surfLabel = type === 'bati' ? 'Surface Bâti (m²)' : type === 'nonbati' ? 'Surface Non Bâti (m²)' : 'Surface Parcelle (m²)';
-      var headers = ['Référence DDC', 'Commune', 'Adresse'];
+      var headers = ['Référence Cart@DS', 'Commune', 'Adresse'];
       if (hasType) headers.push('Type');
       headers.push('Mouvement', surfLabel, "Date de l'acte", 'Année');
 
@@ -3318,7 +3313,7 @@ function exportDashExcel(section) {
       function makeDetailSheet(rows, type) {
         var hasType = (type === 'acq' || type === 'ces');
         var surfLabel = type === 'bati' ? 'Surface Bâti (m²)' : type === 'nonbati' ? 'Surface Non Bâti (m²)' : 'Surface Parcelle (m²)';
-        var headers = ['Référence DDC', 'Commune', 'Adresse'];
+        var headers = ['Référence Cart@DS', 'Commune', 'Adresse'];
         if (hasType) headers.push('Type');
         headers.push('Mouvement', surfLabel, "Date de l'acte", 'Année');
         var data = [headers];
@@ -3439,7 +3434,7 @@ function exportDashImages(section) {
 
 // Mapping: Excel column header → BM_Biens column id
 var EXCEL_COL_MAP = {
-  'Référence DDC': 'Reference_DDC',
+  'Référence Cart@DS': 'Reference_DDC',
   'Reference DDC': 'Reference_DDC',
   'Gestion SPI': 'Gestion_SPI',
   "Nom de l'OFA / OFT": 'Nom_OFA_OFT',
@@ -4179,13 +4174,13 @@ async function saveBien(bienId) {
   if (!canManage) { showToast(t('accessDenied'), 'error'); return; }
 
   var record = getFormData();
-  if (!record.Reference_DDC) { showToast('Référence DDC requise', 'error'); return; }
+  if (!record.Reference_DDC) { showToast('Référence Cart@DS requise', 'error'); return; }
 
   // Check uniqueness of Reference_DDC
   var duplicate = biens.find(function(x) {
     return String(x.Reference_DDC || '').trim().toLowerCase() === String(record.Reference_DDC).trim().toLowerCase() && x.id !== bienId;
   });
-  if (duplicate) { showToast('La Référence DDC "' + record.Reference_DDC + '" existe déjà !', 'error'); return; }
+  if (duplicate) { showToast('La Référence Cart@DS "' + record.Reference_DDC + '" existe déjà !', 'error'); return; }
 
   try {
     if (bienId) {
