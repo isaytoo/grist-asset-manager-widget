@@ -2419,6 +2419,7 @@ function buildFormHtml(bien) {
   var jouissanceAnticipeeOptions = fixedOptions(['Oui', 'Non']);
   var jouissanceDiffereeOptions = fixedOptions(['Oui', 'Non']);
   var nouvelleCoproOptions = fixedOptions(['Oui', 'Non']);
+  var gestionSpiOptions = fixedOptions(['Oui', 'Non']);
   var bailOptions = fixedOptions(['Oui', 'Non']);
   var acqCompteOptions = fixedOptions(['Oui', 'Non']);
   var prefinancementOptions = fixedOptions(['Oui', 'Non']);
@@ -2438,9 +2439,9 @@ function buildFormHtml(bien) {
   // Section: Mouvement
   html += '<div class="form-section"><h4>🔄 ' + t('sectionMouvement') + '</h4>';
   html += '<div class="form-grid">';
-  html += '<div class="form-group"><label>Gestion SPI</label>';
-  html += '<div class="radio-group"><label><input type="radio" name="f-Gestion_SPI" value="Non" ' + (v('Gestion_SPI') !== 'Oui' ? 'checked' : '') + ' /> NON</label>';
-  html += '<label><input type="radio" name="f-Gestion_SPI" value="Oui" ' + (v('Gestion_SPI') === 'Oui' ? 'checked' : '') + ' /> OUI</label></div></div>';
+  html += '<div class="form-group"><label>Gestion SPI</label><select id="f-Gestion_SPI">';
+  html += optionsHtml(gestionSpiOptions, v('Gestion_SPI'));
+  html += '</select></div>';
   html += '<div class="form-group"><label>Type de Mouvement <span class="required">*</span></label><select id="f-Mouvement">';
   html += optionsHtml(mouvementOptions, v('Mouvement'));
   html += '</select></div>';
@@ -2532,10 +2533,7 @@ function getFormData() {
   var record = {};
   for (var i = 0; i < BIEN_COLUMNS.length; i++) {
     var col = BIEN_COLUMNS[i];
-    if (col.id === 'Gestion_SPI') {
-      var radio = document.querySelector('input[name="f-Gestion_SPI"]:checked');
-      record[col.id] = radio ? radio.value : 'Non';
-    } else if (col.id === 'Nature_Bien') {
+    if (col.id === 'Nature_Bien') {
       record[col.id] = window._joditNature ? window._joditNature.value : '';
     } else if (col.id === 'Observation') {
       record[col.id] = window._joditObservation ? window._joditObservation.value : '';
