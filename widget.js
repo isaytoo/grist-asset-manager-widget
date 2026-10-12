@@ -3602,6 +3602,7 @@ async function exportDashPDF() {
     return;
   }
   var FR = currentLang === 'fr';
+  var TITRE = FR ? 'Tableau de bord du patrimoine immobilier (SPI)' : 'Real estate portfolio dashboard (SPI)';
   showToast(FR ? 'Génération du PDF...' : 'Generating PDF...', 'success');
 
   var filtered = getFilteredBiens();
@@ -3734,7 +3735,7 @@ async function exportDashPDF() {
   }
   doc.setFont('helvetica', 'bold'); doc.setFontSize(15);
   doc.setTextColor(INK[0], INK[1], INK[2]);
-  doc.text(FR ? 'Tableau de bord du patrimoine' : 'Portfolio dashboard', tx, 13);
+  doc.text(TITRE, tx, 13);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
   doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
   doc.text((FR ? 'Période : ' : 'Period: ') + _pdfPeriode(), tx, 19.5);
@@ -3897,7 +3898,7 @@ async function exportDashPDF() {
     doc.line(M, PH - 12, PW - M, PH - 12);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
     doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
-    doc.text((FR ? 'Tableau de bord du patrimoine' : 'Portfolio dashboard') + '  ·  ' + _pdfPeriode(), M, PH - 7.5);
+    doc.text(TITRE + '  ·  ' + _pdfPeriode(), M, PH - 7.5);
     doc.text(pg + ' / ' + n, PW - M, PH - 7.5, { align: 'right' });
   }
 
