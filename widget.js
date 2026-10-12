@@ -152,6 +152,7 @@ var i18n = {
     dashSPIStats: 'Statistiques SPI par type d\'acte',
     dashDetailTab: 'Détails des surfaces par bien',
     dashExportExcel: 'Exporter Excel (4 onglets)',
+    dashExportPDF: 'Exporter en PDF',
     dashExportDone: 'Export Excel téléchargé avec succès',
     permTitle: 'Gestion des Droits d\'Accès',
     permSubtitle: 'Pour chaque utilisateur, cochez les onglets auxquels il aura accès. Cocher « Gestion des Biens » donne aussi le droit d\'écriture (ajouter / modifier / supprimer).',
@@ -276,6 +277,7 @@ var i18n = {
     dashSPIStats: 'SPI Statistics by deed type',
     dashDetailTab: 'Surface details by asset',
     dashExportExcel: 'Export Excel (4 tabs)',
+    dashExportPDF: 'Export as PDF',
     dashExportDone: 'Excel export downloaded successfully',
     permTitle: 'Access Rights Management',
     permSubtitle: 'For each user, tick the tabs they can access. Ticking “Asset Management” also grants write access (add / edit / delete).',
@@ -2813,14 +2815,15 @@ function buildLineChart(acqData, cesData, deltaData, monthLabels) {
   return svg + legend;
 }
 
-function renderDashboardView() {
-  var allYears = {};
-  for (var i = 0; i < biens.length; i++) {
-    if (biens[i].Annee) allYears[biens[i].Annee] = true;
-  }
-  var yearList = Object.keys(allYears).sort(function(a, b) { return parseInt(b) - parseInt(a); });
-
-  var filtered = getFilteredBiens();
+/**
+ * Agrégats du tableau de bord pour un jeu de biens filtré.
+ *
+ * Extrait du rendu pour que l'export PDF s'appuie exactement sur les mêmes
+ * règles que l'écran : « CESSION » vaut cession et tout le reste acquisition,
+ * et l'analyse des surfaces ne porte que sur les biens en gestion SPI.
+ * Dupliquer ce calcul aurait laissé les deux vues diverger en silence.
+ */
+function computeDashStats(filtered) {
   var totalBiens = filtered.length;
   var communesSet = {};
   var surfaceParcelle = 0;
@@ -2869,6 +2872,27 @@ function renderDashboardView() {
     }
   }
 
+  return { totalBiens: totalBiens, communesSet: communesSet, surfaceParcelle: surfaceParcelle,
+    surfaceBati: surfaceBati, mouvementCount: mouvementCount, communeCount: communeCount,
+    spiAcq: spiAcq, spiCes: spiCes, noSpiAcq: noSpiAcq, noSpiCes: noSpiCes,
+    surfAcquise: surfAcquise, surfCedee: surfCedee, surfBatiSPI: surfBatiSPI, surfNonBatiSPI: surfNonBatiSPI };
+}
+
+function renderDashboardView() {
+  var allYears = {};
+  for (var i = 0; i < biens.length; i++) {
+    if (biens[i].Annee) allYears[biens[i].Annee] = true;
+  }
+  var yearList = Object.keys(allYears).sort(function(a, b) { return parseInt(b) - parseInt(a); });
+
+  var filtered = getFilteredBiens();
+  var _st = computeDashStats(filtered);
+  var totalBiens = _st.totalBiens, communesSet = _st.communesSet;
+  var surfaceParcelle = _st.surfaceParcelle, surfaceBati = _st.surfaceBati;
+  var mouvementCount = _st.mouvementCount, communeCount = _st.communeCount;
+  var spiAcq = _st.spiAcq, spiCes = _st.spiCes, noSpiAcq = _st.noSpiAcq, noSpiCes = _st.noSpiCes;
+  var surfAcquise = _st.surfAcquise, surfCedee = _st.surfCedee;
+  var surfBatiSPI = _st.surfBatiSPI, surfNonBatiSPI = _st.surfNonBatiSPI;
   // Store values for export functions
   window._dashSurfAcquise = surfAcquise;
   window._dashSurfCedee = surfCedee;
@@ -2880,8 +2904,13 @@ function renderDashboardView() {
   window._dashNoSpiCes = noSpiCes;
 
   var html = '<div class="section-card">';
-  html += '<h3 style="display:flex;align-items:center;gap:10px;"><span style="background:#ef4444;color:#fff;padding:8px 12px;border-radius:10px;font-size:20px;">📊</span> ' + t('dashTitle') + '</h3>';
-  html += '<p style="color:#64748b;margin-bottom:20px;">' + t('dashSubtitle') + '</p>';
+  html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:20px;">';
+  html += '<div>';
+  html += '<h3 style="display:flex;align-items:center;gap:10px;margin:0;"><span style="background:#ef4444;color:#fff;padding:8px 12px;border-radius:10px;font-size:20px;">📊</span> ' + t('dashTitle') + '</h3>';
+  html += '<p style="color:#64748b;margin:6px 0 0;">' + t('dashSubtitle') + '</p>';
+  html += '</div>';
+  html += '<button class="btn-export" style="background:#ef4444;" onclick="exportDashPDF()" title="' + (currentLang === 'fr' ? 'PDF A4 des indicateurs de la p\u00E9riode filtr\u00E9e' : 'A4 PDF of the filtered period') + '">📄 ' + t('dashExportPDF') + '</button>';
+  html += '</div>';
 
   // Stats cards
   html += '<div class="stats-row">';
@@ -3438,6 +3467,366 @@ function exportDashImages(section) {
   });
 
   showToast(currentLang === 'fr' ? 'Export images en cours...' : 'Exporting images...', 'success');
+}
+
+
+// =============================================================================
+// EXPORT PDF DU TABLEAU DE BORD (A4 portrait)
+// =============================================================================
+
+/** Espace comme séparateur de milliers : toLocaleString('fr-FR') produit une
+ *  espace fine insécable absente de l'encodage WinAnsi de jsPDF, qui ressort
+ *  alors en caractère parasite dans le PDF. */
+function _pdfNum(n) {
+  var v = Math.round(Number(n) || 0);
+  var s = Math.abs(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return (v < 0 ? '-' : '') + s;
+}
+function _pdfM2(n) { return _pdfNum(n) + ' m²'; }
+
+/**
+ * Rastérise un graphique SVG en PNG.
+ *
+ * On régénère le SVG au lieu de lire celui du DOM : les camemberts des surfaces
+ * ne sont présents que si le sous-onglet « Analyse » est ouvert, or l'export
+ * doit produire le même document quel que soit l'onglet affiché.
+ */
+function _svgToPng(markup, scale) {
+  return new Promise(function (resolve) {
+    var host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;';
+    host.innerHTML = markup;
+    document.body.appendChild(host);
+    var svg = host.querySelector('svg');
+    if (!svg) { document.body.removeChild(host); resolve(null); return; }
+    var w = parseInt(svg.getAttribute('width'), 10) || 300;
+    var h = parseInt(svg.getAttribute('height'), 10) || 300;
+    var bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    bg.setAttribute('width', '100%'); bg.setAttribute('height', '100%'); bg.setAttribute('fill', '#ffffff');
+    svg.insertBefore(bg, svg.firstChild);
+    var data = new XMLSerializer().serializeToString(svg);
+    document.body.removeChild(host);
+    var url = URL.createObjectURL(new Blob([data], { type: 'image/svg+xml;charset=utf-8' }));
+    var img = new Image();
+    img.onload = function () {
+      var c = document.createElement('canvas');
+      c.width = w * scale; c.height = h * scale;
+      var cx = c.getContext('2d');
+      cx.fillStyle = '#ffffff'; cx.fillRect(0, 0, c.width, c.height);
+      cx.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve({ data: c.toDataURL('image/png'), w: w, h: h });
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+}
+
+/** Libellé lisible de la période retenue par les filtres temporels. */
+function _pdfPeriode() {
+  var noms = currentLang === 'fr'
+    ? ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']
+    : ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  var an = dashFilterYears.length
+    ? dashFilterYears.slice().sort().join(', ')
+    : (currentLang === 'fr' ? 'Toutes années' : 'All years');
+  if (!dashFilterMonths.length) return an;
+  var mo = dashFilterMonths.slice().sort(function (a, b) { return parseInt(a, 10) - parseInt(b, 10); })
+    .map(function (m) { return noms[parseInt(m, 10) - 1]; }).join(', ');
+  return an + ' — ' + mo;
+}
+
+/**
+ * Export PDF A4 du tableau de bord, tel que les filtres temporels le donnent.
+ *
+ * Les chiffres viennent de computeDashStats, le calcul même de l'écran : le PDF
+ * ne peut donc pas afficher autre chose que ce que l'utilisateur a sous les yeux.
+ */
+async function exportDashPDF() {
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    showToast(currentLang === 'fr' ? 'Librairie PDF non chargée' : 'PDF library not loaded', 'error');
+    return;
+  }
+  var FR = currentLang === 'fr';
+  showToast(FR ? 'Génération du PDF...' : 'Generating PDF...', 'success');
+
+  var filtered = getFilteredBiens();
+  var s = computeDashStats(filtered);
+
+  // Évolution mensuelle SPI — même règle que l'écran
+  var mAcq = [0,0,0,0,0,0,0,0,0,0,0,0], mCes = [0,0,0,0,0,0,0,0,0,0,0,0], mDelta = [0,0,0,0,0,0,0,0,0,0,0,0];
+  for (var i = 0; i < filtered.length; i++) {
+    var b = filtered[i];
+    if (String(b.Gestion_SPI || '').toUpperCase() !== 'OUI') continue;
+    var mi = parseMonthFromDate(b.Date_Acte) - 1;
+    if (mi < 0 || mi > 11) continue;
+    if (String(b.Mouvement || '').toUpperCase().indexOf('CESSION') !== -1) mCes[mi]++; else mAcq[mi]++;
+  }
+  for (var i = 0; i < 12; i++) mDelta[i] = mAcq[i] - mCes[i];
+  var mfl = FR ? ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc']
+               : ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  // Rastérisation x2 : une image de 400 px rendue sur 42 mm donne ~240 dpi,
+  // largement suffisant à l'impression, pour un fichier dix fois plus léger qu'en x3.
+  var SC = 2;
+  var imgAcqCed = await _svgToPng(buildPieChart([
+    { value: s.surfAcquise, color: '#22c55e', label: 'Surfaces acquises' },
+    { value: s.surfCedee, color: '#d97706', label: 'Surfaces cédées' }
+  ], 200), SC);
+  var imgBati = await _svgToPng(buildPieChart([
+    { value: s.surfBatiSPI, color: '#3b82f6', label: 'Surface bâti' },
+    { value: s.surfNonBatiSPI, color: '#22c55e', label: 'Surface non bâti' }
+  ], 200), SC);
+  var imgSpiPie = await _svgToPng(buildPieChart([
+    { value: s.spiAcq, color: '#166534', label: 'SPI hors cession' },
+    { value: s.noSpiAcq, color: '#86efac', label: 'Hors SPI, hors cession' },
+    { value: s.spiCes, color: '#4d7c0f', label: 'SPI cession' },
+    { value: s.noSpiCes, color: '#d9f99d', label: 'Hors SPI cession' }
+  ], 220, 'count'), SC);
+  var imgSpiLine = await _svgToPng(buildLineChart(mAcq, mCes, mDelta, mfl), SC);
+
+  var jsPDF = window.jspdf.jsPDF;
+  var doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+  var PW = 210, PH = 297, M = 12, UW = PW - 2 * M;
+  var INK = [15, 23, 42], MUTED = [100, 116, 139], LINE = [226, 232, 240];
+
+  function carte(x, y, w, h) {
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(LINE[0], LINE[1], LINE[2]);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(x, y, w, h, 2.5, 2.5, 'FD');
+  }
+  function titreSection(txt, yy) {
+    doc.setFillColor(239, 68, 68);
+    doc.roundedRect(M, yy - 3.4, 1.6, 4.6, 0.8, 0.8, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5);
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+    doc.text(txt, M + 4.5, yy);
+    return yy + 5.5;
+  }
+  /**
+   * Place une image au centre d'une boîte, à l'échelle qui y tient.
+   *
+   * Sans cette contrainte, la courbe (500x300) calée sur la largeur de sa carte
+   * en débordait par le bas et recouvrait le tableau suivant.
+   */
+  function imageDansBoite(img, bx, by, bw, bh) {
+    if (!img) {
+      // buildPieChart ne renvoie pas de SVG quand le total est nul : sans ce
+      // repli la carte restait vide, sans dire pourquoi.
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184);
+      doc.text(FR ? 'Aucune donn\u00E9e' : 'No data', bx + bw / 2, by + bh / 2, { align: 'center' });
+      return;
+    }
+    var k = Math.min(bw / img.w, bh / img.h);
+    var w = img.w * k, h = img.h * k;
+    doc.addImage(img.data, 'PNG', bx + (bw - w) / 2, by + (bh - h) / 2, w, h);
+  }
+  /**
+   * Légende compacte : pastille de couleur + libellé.
+   *
+   * Indispensable ici : les camemberts et la courbe portent leurs valeurs mais
+   * pas le nom des séries, et la légende de la courbe est un bloc HTML placé
+   * HORS du SVG — elle est donc perdue à la rastérisation.
+   */
+  function legende(x, yy, w, items, cols) {
+    cols = cols || 1;
+    var cw = w / cols, lh = 4.2;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.3);
+    for (var k = 0; k < items.length; k++) {
+      var cx = x + (k % cols) * cw, cy = yy + Math.floor(k / cols) * lh;
+      doc.setFillColor(items[k].c[0], items[k].c[1], items[k].c[2]);
+      doc.circle(cx + 1.2, cy - 0.9, 1.05, 'F');
+      doc.setTextColor(71, 85, 105);
+      doc.text(items[k].t, cx + 3.4, cy);
+    }
+  }
+  /** Bandeau de 3 valeurs sous un camembert (libellé coloré, valeur en encre). */
+  function bandeau(x, yy, w, cols) {
+    var cw = w / cols.length;
+    for (var k = 0; k < cols.length; k++) {
+      doc.setFillColor(cols[k].c[0], cols[k].c[1], cols[k].c[2]);
+      doc.rect(x + k * cw, yy, cw, 5.4, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(6.2);
+      doc.setTextColor(255, 255, 255);
+      doc.text(cols[k].t, x + k * cw + cw / 2, yy + 3.6, { align: 'center' });
+      doc.setFontSize(8.4);
+      doc.setTextColor(INK[0], INK[1], INK[2]);
+      doc.text(cols[k].v, x + k * cw + cw / 2, yy + 10.4, { align: 'center' });
+    }
+  }
+
+  // ===== EN-TÊTE =====
+  doc.setFillColor(15, 23, 42);
+  doc.rect(0, 0, PW, 30, 'F');
+  doc.setFillColor(239, 68, 68);
+  doc.rect(0, 30, PW, 1.2, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(17);
+  doc.setTextColor(255, 255, 255);
+  doc.text(FR ? 'Tableau de bord du patrimoine' : 'Portfolio dashboard', M, 14.5);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
+  doc.setTextColor(203, 213, 225);
+  doc.text((FR ? 'Période : ' : 'Period: ') + _pdfPeriode(), M, 22);
+  doc.setFontSize(8);
+  doc.text((FR ? 'Généré le ' : 'Generated ') + new Date().toLocaleDateString('fr-FR'), PW - M, 22, { align: 'right' });
+
+  var y = 40;
+
+  // ===== INDICATEURS =====
+  var kpis = [
+    { v: _pdfNum(s.totalBiens), l: FR ? 'BIENS' : 'ASSETS', c: [239, 68, 68] },
+    { v: _pdfNum(Object.keys(s.communesSet).length), l: 'COMMUNES', c: [59, 130, 246] },
+    { v: _pdfM2(s.surfaceParcelle), l: FR ? 'SURFACE PARCELLE' : 'PARCEL AREA', c: [34, 197, 94] },
+    { v: _pdfM2(s.surfaceBati), l: FR ? 'SURFACE B\u00C2TIE' : 'BUILT AREA', c: [217, 119, 6] }
+  ];
+  var kw = (UW - 3 * 3) / 4;
+  for (var i = 0; i < kpis.length; i++) {
+    var kx = M + i * (kw + 3);
+    carte(kx, y, kw, 20);
+    doc.setFillColor(kpis[i].c[0], kpis[i].c[1], kpis[i].c[2]);
+    doc.roundedRect(kx + 3.5, y + 3.6, 6, 1.4, 0.7, 0.7, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+    doc.text(kpis[i].v, kx + 3.5, y + 12.2);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.4);
+    doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+    doc.text(kpis[i].l, kx + 3.5, y + 16.4);
+  }
+  y += 27;
+
+  // ===== ANALYSE DES SURFACES =====
+  y = titreSection((FR ? 'Analyse des surfaces' : 'Area analysis') + '   (Gestion SPI = OUI)', y);
+  var cw2 = (UW - 4) / 2, ch = 72;
+  carte(M, y, cw2, ch);
+  carte(M + cw2 + 4, y, cw2, ch);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+  doc.setTextColor(INK[0], INK[1], INK[2]);
+  doc.text(FR ? 'Surfaces acquises / cédées' : 'Acquired / sold areas', M + cw2 / 2, y + 6, { align: 'center' });
+  doc.text(FR ? 'Répartition bâti / non bâti' : 'Built / non-built split', M + cw2 + 4 + cw2 / 2, y + 6, { align: 'center' });
+  imageDansBoite(imgAcqCed, M + 4, y + 8.5, cw2 - 8, 43);
+  imageDansBoite(imgBati, M + cw2 + 8, y + 8.5, cw2 - 8, 43);
+  bandeau(M + 4, y + 54, cw2 - 8, [
+    { t: FR ? 'ACQUISITIONS' : 'ACQUIRED', v: _pdfM2(s.surfAcquise), c: [34, 197, 94] },
+    { t: FR ? 'CESSIONS' : 'SOLD', v: _pdfM2(s.surfCedee), c: [217, 119, 6] },
+    { t: FR ? '\u00C9CART' : 'NET', v: _pdfM2(s.surfAcquise + s.surfCedee), c: [220, 38, 38] }
+  ]);
+  bandeau(M + cw2 + 8, y + 54, cw2 - 8, [
+    { t: FR ? 'B\u00C2TI' : 'BUILT', v: _pdfM2(s.surfBatiSPI), c: [59, 130, 246] },
+    { t: FR ? 'NON B\u00C2TI' : 'NON-BUILT', v: _pdfM2(s.surfNonBatiSPI), c: [34, 197, 94] },
+    { t: 'TOTAL', v: _pdfM2(s.surfBatiSPI + s.surfNonBatiSPI), c: [71, 85, 105] }
+  ]);
+  y += ch + 7;
+
+  // ===== GESTION SPI =====
+  y = titreSection(FR ? 'Gestion SPI' : 'SPI management', y);
+  var wPie = 62, wLine = UW - wPie - 4, hBloc = 74;
+  carte(M, y, wPie, hBloc);
+  carte(M + wPie + 4, y, wLine, hBloc);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+  doc.setTextColor(INK[0], INK[1], INK[2]);
+  doc.text(FR ? 'Répartition SPI' : 'SPI split', M + wPie / 2, y + 6, { align: 'center' });
+  doc.text(FR ? 'Évolution mensuelle' : 'Monthly trend', M + wPie + 4 + wLine / 2, y + 6, { align: 'center' });
+  imageDansBoite(imgSpiPie, M + 3, y + 9, wPie - 6, hBloc - 32);
+  legende(M + 4, y + hBloc - 17, wPie - 8, [
+    { t: FR ? 'SPI, hors cession' : 'SPI, excl. disposals', c: [22, 101, 52] },
+    { t: FR ? 'Hors SPI, hors cession' : 'Non-SPI, excl. disposals', c: [134, 239, 172] },
+    { t: FR ? 'SPI, cession' : 'SPI, disposal', c: [77, 124, 15] },
+    { t: FR ? 'Hors SPI, cession' : 'Non-SPI, disposal', c: [217, 249, 157] }
+  ], 1);
+  imageDansBoite(imgSpiLine, M + wPie + 7, y + 9, wLine - 8, hBloc - 26);
+  legende(M + wPie + 12, y + hBloc - 7, wLine - 18, [
+    { t: FR ? 'Acquisitions' : 'Acquisitions', c: [22, 101, 52] },
+    { t: FR ? 'Cessions' : 'Disposals', c: [212, 215, 0] },
+    { t: FR ? '\u00C9cart' : 'Net', c: [30, 41, 59] }
+  ], 3);
+  y += hBloc + 6;
+
+  doc.autoTable({
+    startY: y, margin: { left: M, right: M },
+    head: [[FR ? "Type d'acte" : 'Act type', 'Total', FR ? 'dont gestion SPI' : 'of which SPI']],
+    body: [
+      [FR ? 'Acquisitions' : 'Acquisitions', _pdfNum(s.spiAcq + s.noSpiAcq), _pdfNum(s.spiAcq)],
+      [FR ? 'Cessions' : 'Disposals', _pdfNum(s.spiCes + s.noSpiCes), _pdfNum(s.spiCes)],
+      ['Total', _pdfNum(s.spiAcq + s.noSpiAcq + s.spiCes + s.noSpiCes), _pdfNum(s.spiAcq + s.spiCes)]
+    ],
+    theme: 'plain', styles: { fontSize: 8.5, cellPadding: 2.2, textColor: INK },
+    headStyles: { fillColor: [241, 245, 249], textColor: [71, 85, 105], fontStyle: 'bold', fontSize: 7.5 },
+    columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right', textColor: [22, 163, 74], fontStyle: 'bold' } },
+    didParseCell: function (d) {
+      if (d.column.index > 0) d.cell.styles.halign = 'right';   // l'en-tête doit suivre ses valeurs
+      if (d.section === 'body' && d.row.index === 2) d.cell.styles.fontStyle = 'bold';
+    },
+    didDrawPage: function () {}
+  });
+  y = doc.lastAutoTable.finalY + 8;
+
+  // ===== RÉPARTITIONS (page 2) =====
+  doc.addPage();
+  doc.setFillColor(248, 250, 252);
+  doc.rect(0, 0, PW, 16, 'F');
+  doc.setFillColor(239, 68, 68);
+  doc.rect(0, 16, PW, 0.8, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+  doc.setTextColor(INK[0], INK[1], INK[2]);
+  doc.text(FR ? 'Répartitions' : 'Breakdowns', M, 10.5);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+  doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+  doc.text(_pdfPeriode(), PW - M, 10.5, { align: 'right' });
+  y = 26;
+
+  /** Table classée avec barre de magnitude : une seule série, donc une seule teinte. */
+  function tableBarres(titre, paires, couleur, yy) {
+    yy = titreSection(titre, yy);
+    var maxV = 0;
+    paires.forEach(function (p) { if (p[1] > maxV) maxV = p[1]; });
+    doc.autoTable({
+      startY: yy, margin: { left: M, right: M },
+      head: [[FR ? 'Libellé' : 'Label', FR ? 'Nombre' : 'Count', '']],
+      body: paires.map(function (p) { return [p[0], _pdfNum(p[1]), '']; }),
+      theme: 'plain', styles: { fontSize: 8.5, cellPadding: 2, textColor: INK },
+      headStyles: { fillColor: [241, 245, 249], textColor: [71, 85, 105], fontStyle: 'bold', fontSize: 7.5 },
+      alternateRowStyles: { fillColor: [252, 252, 253] },
+      columnStyles: { 0: { cellWidth: 70 }, 1: { cellWidth: 20, halign: 'right', fontStyle: 'bold' }, 2: { cellWidth: UW - 90 } },
+      didDrawCell: function (d) {
+        if (d.section !== 'body' || d.column.index !== 2 || !maxV) return;
+        var v = paires[d.row.index][1];
+        var bw = (d.cell.width - 4) * (v / maxV);
+        doc.setFillColor(couleur[0], couleur[1], couleur[2]);
+        doc.roundedRect(d.cell.x + 2, d.cell.y + d.cell.height / 2 - 1.6, Math.max(bw, 0.6), 3.2, 1.2, 1.2, 'F');
+      }
+    });
+    return doc.lastAutoTable.finalY + 8;
+  }
+
+  var mouvPaires = Object.keys(s.mouvementCount)
+    .sort(function (a, b) { return s.mouvementCount[b] - s.mouvementCount[a]; })
+    .map(function (k) { return [k, s.mouvementCount[k]]; });
+  var comPaires = Object.keys(s.communeCount)
+    .sort(function (a, b) { return s.communeCount[b] - s.communeCount[a]; })
+    .slice(0, 10).map(function (k) { return [k, s.communeCount[k]]; });
+
+  if (mouvPaires.length) y = tableBarres(FR ? 'Répartition par mouvement' : 'By movement type', mouvPaires, [239, 68, 68], y);
+  if (comPaires.length) {
+    if (y > PH - 70) { doc.addPage(); y = 22; }
+    y = tableBarres(FR ? 'Top 10 des communes' : 'Top 10 municipalities', comPaires, [59, 130, 246], y);
+  }
+
+  // ===== PIEDS DE PAGE =====
+  var n = doc.internal.getNumberOfPages();
+  for (var pg = 1; pg <= n; pg++) {
+    doc.setPage(pg);
+    doc.setDrawColor(LINE[0], LINE[1], LINE[2]); doc.setLineWidth(0.3);
+    doc.line(M, PH - 12, PW - M, PH - 12);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+    doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+    doc.text((FR ? 'Tableau de bord du patrimoine' : 'Portfolio dashboard') + '  ·  ' + _pdfPeriode(), M, PH - 7.5);
+    doc.text(pg + ' / ' + n, PW - M, PH - 7.5, { align: 'right' });
+  }
+
+  var suffixe = (dashFilterYears.length ? dashFilterYears.slice().sort().join('-') : 'toutes-annees');
+  doc.save('tableau-de-bord-' + suffixe + '.pdf');
+  showToast(FR ? 'PDF généré' : 'PDF generated', 'success');
 }
 
 // =============================================================================
