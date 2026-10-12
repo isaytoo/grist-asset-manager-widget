@@ -39,6 +39,9 @@
     .app-header-left h1 { font-size: 20px; font-weight: 800; }
     .app-header-left p { font-size: 12px; color: #64748b; }
     .app-header-right { display: flex; align-items: center; gap: 8px; }
+    /* Version du widget : volontairement effacée, elle ne sert qu'au support
+       pour savoir quelle version l'utilisateur a réellement chargée. */
+    .app-version { font-size: 10px; font-weight: 600; color: #cbd5e1; letter-spacing: .02em; user-select: none; }
 
     .lang-btn { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 700; background: #f1f5f9; color: #64748b; }
     .lang-btn.active { background: #ef4444; color: #fff; }
@@ -409,6 +412,7 @@
         </div>
       </div>
       <div class="app-header-right">
+        <span class="app-version" id="app-version" title="Version du widget"></span>
         <button class="lang-btn active" onclick="setLang('fr')">FR</button>
         <button class="lang-btn" onclick="setLang('en')">EN</button>
       </div>
@@ -458,7 +462,7 @@
   <!-- FAB -->
   <button class="fab" id="fab-add" onclick="openAddModal()" title="Ajouter un bien" style="display:none;">+</button>
 
-  <script src="widget.js?v=54"></script>
+  <script src="widget.js?v=55"></script>
   <footer style="position: fixed; bottom: 0; left: 0; right: 0; background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 4px 12px; font-size: 0.7em; color: #94a3b8; z-index: 1000;">
     <span>© 2026 Said Hamadou (SPI)</span>
   </footer>

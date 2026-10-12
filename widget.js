@@ -22,6 +22,10 @@ var isOwner = false;
 var isEditor = false;
 var canManage = false; // Can write biens (Owner OR gestion permission OR Editor fallback)
 var currentLang = 'fr';
+// Version affichée en haut à droite. À incrémenter en même temps que le
+// ?v= de index.html : si les deux divergent, l'interface annonce une version
+// que le navigateur n'a pas forcément chargée.
+var WIDGET_VERSION = 'v55';
 var currentUserEmail = '';
 var userAllowedTabs = []; // Tabs allowed for current user based on BM_Permissions
 var searchPage = 1;
@@ -4769,6 +4773,13 @@ function updateCanManage() {
 // =============================================================================
 // INITIALIZATION
 // =============================================================================
+
+// Affichée dès le chargement, y compris hors Grist : setLang() n'est appelé
+// qu'au clic sur FR/EN, l'étiquette serait restée vide jusque-là.
+(function () {
+  var elv = document.getElementById('app-version');
+  if (elv) elv.textContent = WIDGET_VERSION;
+})();
 
 if (!isInsideGrist()) {
   document.getElementById('not-in-grist').classList.remove('hidden');
