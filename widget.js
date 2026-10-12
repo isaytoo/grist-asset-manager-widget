@@ -3522,6 +3522,27 @@ function _svgToPng(markup, scale) {
   });
 }
 
+/**
+ * Logo de la collectivité pour l'en-tête des PDF, en data URI.
+ *
+ * PNG de préférence, fond transparent ou blanc, hauteur >= 200 px pour rester
+ * net à l'impression. Vide tant que le fichier officiel de la charte graphique
+ * n'a pas été fourni : l'en-tête s'adapte alors et le titre prend toute la
+ * largeur, plutôt que de réserver un cadre vide.
+ */
+var PDF_LOGO = '';
+
+/** Charge un data URI en image et en relève les dimensions (null si absent). */
+function _imageDepuisDataUri(uri) {
+  return new Promise(function (resolve) {
+    if (!uri) { resolve(null); return; }
+    var img = new Image();
+    img.onload = function () { resolve({ data: uri, w: img.naturalWidth || img.width, h: img.naturalHeight || img.height }); };
+    img.onerror = function () { resolve(null); };
+    img.src = uri;
+  });
+}
+
 /** Libellé lisible de la période retenue par les filtres temporels. */
 function _pdfPeriode() {
   var noms = currentLang === 'fr'
@@ -3584,6 +3605,8 @@ async function exportDashPDF() {
     { value: s.noSpiCes, color: '#d9f99d', label: 'Hors SPI cession' }
   ], 220, 'count'), SC);
   var imgSpiLine = await _svgToPng(buildLineChart(mAcq, mCes, mDelta, mfl), SC);
+
+  var logo = await _imageDepuisDataUri(PDF_LOGO);
 
   var jsPDF = window.jspdf.jsPDF;
   var doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
@@ -3658,20 +3681,31 @@ async function exportDashPDF() {
   }
 
   // ===== EN-TÊTE =====
-  doc.setFillColor(15, 23, 42);
-  doc.rect(0, 0, PW, 30, 'F');
+  // Fond blanc : un aplat sombre derrière le logo de la collectivité en
+  // dénaturerait les couleurs, ce que la charte graphique n'autorise pas.
+  // Le filet rouge suffit à poser l'en-tête.
+  var hHead = 28;
   doc.setFillColor(239, 68, 68);
-  doc.rect(0, 30, PW, 1.2, 'F');
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(17);
-  doc.setTextColor(255, 255, 255);
-  doc.text(FR ? 'Tableau de bord du patrimoine' : 'Portfolio dashboard', M, 14.5);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
-  doc.setTextColor(203, 213, 225);
-  doc.text((FR ? 'Période : ' : 'Period: ') + _pdfPeriode(), M, 22);
+  doc.rect(0, hHead, PW, 1, 'F');
+  var tx = M;
+  if (logo) {
+    var lgH = 14, lgW = lgH * (logo.w / logo.h);
+    if (lgW > 48) { lgW = 48; lgH = lgW * (logo.h / logo.w); }
+    doc.addImage(logo.data, 'PNG', M, (hHead - lgH) / 2, lgW, lgH);
+    tx = M + lgW + 7;
+    doc.setDrawColor(LINE[0], LINE[1], LINE[2]); doc.setLineWidth(0.3);
+    doc.line(tx - 3.5, 6, tx - 3.5, hHead - 6);
+  }
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(15);
+  doc.setTextColor(INK[0], INK[1], INK[2]);
+  doc.text(FR ? 'Tableau de bord du patrimoine' : 'Portfolio dashboard', tx, 13);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+  doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+  doc.text((FR ? 'Période : ' : 'Period: ') + _pdfPeriode(), tx, 19.5);
   doc.setFontSize(8);
-  doc.text((FR ? 'Généré le ' : 'Generated ') + new Date().toLocaleDateString('fr-FR'), PW - M, 22, { align: 'right' });
+  doc.text((FR ? 'Généré le ' : 'Generated ') + new Date().toLocaleDateString('fr-FR'), PW - M, 19.5, { align: 'right' });
 
-  var y = 40;
+  var y = 38;
 
   // ===== INDICATEURS =====
   var kpis = [
@@ -3767,9 +3801,16 @@ async function exportDashPDF() {
   doc.rect(0, 0, PW, 16, 'F');
   doc.setFillColor(239, 68, 68);
   doc.rect(0, 16, PW, 0.8, 'F');
+  var tx2 = M;
+  if (logo) {
+    var l2H = 9, l2W = l2H * (logo.w / logo.h);
+    if (l2W > 30) { l2W = 30; l2H = l2W * (logo.h / logo.w); }
+    doc.addImage(logo.data, 'PNG', M, (16 - l2H) / 2, l2W, l2H);
+    tx2 = M + l2W + 5;
+  }
   doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
   doc.setTextColor(INK[0], INK[1], INK[2]);
-  doc.text(FR ? 'Répartitions' : 'Breakdowns', M, 10.5);
+  doc.text(FR ? 'Répartitions' : 'Breakdowns', tx2, 10.5);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
   doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
   doc.text(_pdfPeriode(), PW - M, 10.5, { align: 'right' });
