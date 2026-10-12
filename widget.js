@@ -1294,7 +1294,7 @@ function generateRapportPDF() {
   }
 
   // Save
-  var fileName = 'Mouvements_Patrimoine_' + dateDebutEl.value + '_' + dateFinEl.value + '.pdf';
+  var fileName = _nomFichierPdf('Mouvements_Patrimoine_' + dateDebutEl.value + '_' + dateFinEl.value);
   doc.save(fileName);
   showToast('PDF généré avec succès (' + filtered.length + ' biens)', 'success');
 }
@@ -3485,6 +3485,38 @@ function _pdfNum(n) {
 function _pdfM2(n) { return _pdfNum(n) + ' m²'; }
 
 /**
+ * Nom de fichier horodaté et numéroté.
+ *
+ * Deux exports successifs portaient le même nom : le second écrasait le
+ * premier dans le dossier de téléchargement, ou le navigateur y accolait un
+ * « (1) » sur lequel on n'a aucune prise. Le compteur est mémorisé par jour et
+ * par document dans localStorage, pour survivre au rechargement du widget ; si
+ * le stockage est refusé — navigation privée, cookies tiers bloqués dans
+ * l'iframe Grist — on retombe sur un compteur en mémoire, qui ne protège alors
+ * que la session en cours.
+ */
+var _pdfSeq = {};
+function _nomFichierPdf(base) {
+  var d = new Date();
+  var jour = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  var cle = 'amw_pdfseq_' + base + '_' + jour;
+  var n = _pdfSeq[cle] || 0;
+  try { var st = parseInt(localStorage.getItem(cle), 10); if (st > n) n = st; } catch (e) {}
+  n++;
+  _pdfSeq[cle] = n;
+  try {
+    localStorage.setItem(cle, String(n));
+    // Purge des compteurs des jours passés : sans elle, une clé s'accumule par
+    // jour et par périmètre exporté.
+    for (var i = localStorage.length - 1; i >= 0; i--) {
+      var k = localStorage.key(i);
+      if (k && k.indexOf('amw_pdfseq_') === 0 && k.slice(-(jour.length + 1)) !== '_' + jour) localStorage.removeItem(k);
+    }
+  } catch (e) {}
+  return base + '_' + jour + '_' + ('0' + n).slice(-2) + '.pdf';
+}
+
+/**
  * Rastérise un graphique SVG en PNG.
  *
  * On régénère le SVG au lieu de lire celui du DOM : les camemberts des surfaces
@@ -3870,7 +3902,7 @@ async function exportDashPDF() {
   }
 
   var suffixe = (dashFilterYears.length ? dashFilterYears.slice().sort().join('-') : 'toutes-annees');
-  doc.save('tableau-de-bord-' + suffixe + '.pdf');
+  doc.save(_nomFichierPdf('tableau-de-bord-' + suffixe));
   showToast(FR ? 'PDF généré' : 'PDF generated', 'success');
 }
 
