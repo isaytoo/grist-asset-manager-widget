@@ -25,7 +25,7 @@ var currentLang = 'fr';
 // Version affichée en haut à droite. À incrémenter en même temps que le
 // ?v= de index.html : si les deux divergent, l'interface annonce une version
 // que le navigateur n'a pas forcément chargée.
-var WIDGET_VERSION = 'v60';
+var WIDGET_VERSION = 'v61';
 var currentUserEmail = '';
 var userAllowedTabs = []; // Tabs allowed for current user based on BM_Permissions
 var searchPage = 1;
@@ -2838,6 +2838,34 @@ function cleMouvement(v) {
   return normSearchText(v).replace(/\s+/g, ' ').trim().toUpperCase();
 }
 
+/**
+ * Clé de regroupement d'une commune.
+ *
+ * Même défaut que pour les mouvements : « VENISSIEUX », « VÉNISSIEUX » et
+ * « Vénissieux » comptaient pour trois communes distinctes, ce qui gonflait
+ * l'indicateur de tête et éclatait le classement. On regroupe sur le libellé
+ * sans casse ni accents, en conservant pour l'affichage la première graphie
+ * rencontrée — sans quoi « VÉNISSIEUX » perdrait son accent.
+ */
+function cleCommune(v) { return cleMouvement(v); }
+/** Vrai si le libellé porte au moins un accent. */
+function aDesAccents(v) {
+  var t = String(v == null ? '' : v);
+  return t !== t.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+/**
+ * Choisit la graphie à afficher entre deux variantes d'une même commune.
+ *
+ * La première rencontrée gagnait, si bien que « VÉNISSIEUX » s'affichait sans
+ * accent quand la variante fautive figurait plus haut dans le fichier. On
+ * préfère donc la graphie accentuée.
+ */
+function meilleurLibelle(actuel, candidat) {
+  if (!actuel) return candidat;
+  if (!aDesAccents(actuel) && aDesAccents(candidat)) return candidat;
+  return actuel;
+}
+
 function computeDashStats(filtered) {
   var totalBiens = filtered.length;
   var communesSet = {};
@@ -2845,6 +2873,7 @@ function computeDashStats(filtered) {
   // SPI / hors SPI, cessions / reste, que les compteurs bruts ne portaient pas.
   var mouvGroupe = {};
   var communeSplit = {};
+  var communeLabel = {};
   var nbAcqSPI = 0, nbCesSPI = 0, nbBatiSPI = 0, nbNonBatiSPI = 0;
   // Ventilation SPI / hors SPI des quatre indicateurs de tête. Ils portaient sur
   // tous les biens sans le dire, juste au-dessus d'une analyse des surfaces
@@ -2868,10 +2897,12 @@ function computeDashStats(filtered) {
     var estSPI = String(b.Gestion_SPI || '').toUpperCase() === 'OUI';
     if (estSPI) nbSPI++; else nbHors++;
     if (b.Commune) {
-      communesSet[b.Commune] = true; communeCount[b.Commune] = (communeCount[b.Commune] || 0) + 1;
+      var kc = cleCommune(b.Commune);
+      communeLabel[kc] = meilleurLibelle(communeLabel[kc], String(b.Commune).trim());
+      communesSet[kc] = true; communeCount[kc] = (communeCount[kc] || 0) + 1;
       // Une commune peut porter des biens des deux côtés : elle compte alors
       // dans les deux ensembles, dont la somme dépasse le total. C'est voulu.
-      if (estSPI) communesSPISet[b.Commune] = true; else communesHorsSet[b.Commune] = true;
+      if (estSPI) communesSPISet[kc] = true; else communesHorsSet[kc] = true;
     }
     var sp = parseNum(b.Surface_Parcelle);
     var sb = parseNum(b.Surface_Bati);
@@ -2892,9 +2923,10 @@ function computeDashStats(filtered) {
       if (isSPI) mouvGroupe[km].spi++; else mouvGroupe[km].hors++;
     }
     if (b.Commune) {
-      if (!communeSplit[b.Commune]) communeSplit[b.Commune] = { ces: 0, autre: 0, total: 0 };
-      communeSplit[b.Commune].total++;
-      if (isCes) communeSplit[b.Commune].ces++; else communeSplit[b.Commune].autre++;
+      var kc2 = cleCommune(b.Commune);
+      if (!communeSplit[kc2]) communeSplit[kc2] = { ces: 0, autre: 0, total: 0 };
+      communeSplit[kc2].total++;
+      if (isCes) communeSplit[kc2].ces++; else communeSplit[kc2].autre++;
     }
 
     // Surface analysis: SPI only, totalSurface = surfaceBati + surfaceParcelle per item
@@ -2927,7 +2959,7 @@ function computeDashStats(filtered) {
     surfaceBati: surfaceBati, mouvementCount: mouvementCount, communeCount: communeCount,
     spiAcq: spiAcq, spiCes: spiCes, noSpiAcq: noSpiAcq, noSpiCes: noSpiCes,
     surfAcquise: surfAcquise, surfCedee: surfCedee, surfBatiSPI: surfBatiSPI, surfNonBatiSPI: surfNonBatiSPI,
-    mouvGroupe: mouvGroupe, communeSplit: communeSplit,
+    mouvGroupe: mouvGroupe, communeSplit: communeSplit, communeLabel: communeLabel,
     nbAcqSPI: nbAcqSPI, nbCesSPI: nbCesSPI, nbBatiSPI: nbBatiSPI, nbNonBatiSPI: nbNonBatiSPI,
     nbSPI: nbSPI, nbHors: nbHors,
     communesSPI: Object.keys(communesSPISet).length, communesHors: Object.keys(communesHorsSet).length,
@@ -3276,14 +3308,24 @@ function renderDashboardView() {
   // ===== Top 10 communes (card grid) =====
   html += '<div class="section-card" style="margin-top:20px;">';
   html += '<h3>🏘️ ' + t('topCommunes') + titleYearSuffix + '</h3>';
+  var _nbCom = Object.keys(communesSet).length;
   html += filterSubtitle;
   var communeKeys = Object.keys(communeCount).sort(function(a, b) { return communeCount[b] - communeCount[a]; }).slice(0, 10);
+  // Dire que le classement n'en montre que dix : l'écart avec l'indicateur de
+  // tête se lisait comme une incohérence.
+  if (communeKeys.length < _nbCom) {
+    html += '<p style="font-size:11px;color:#94a3b8;margin:4px 0 0;">'
+      + (currentLang === 'fr'
+          ? 'Les ' + communeKeys.length + ' premières des ' + _nbCom + ' communes ayant connu un mouvement sur la période.'
+          : 'The top ' + communeKeys.length + ' of ' + _nbCom + ' municipalities with movements over the period.')
+      + '</p>';
+  }
   html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-top:16px;">';
   for (var i = 0; i < communeKeys.length; i++) {
     html += '<div style="text-align:center;padding:16px 8px;">';
     html += '<div style="width:100%;height:4px;background:#ef4444;border-radius:2px;margin-bottom:12px;"></div>';
     html += '<div style="font-size:32px;font-weight:900;color:#ef4444;line-height:1;">' + communeCount[communeKeys[i]] + '</div>';
-    html += '<div style="font-size:10px;font-weight:800;color:#475569;margin-top:6px;text-transform:uppercase;">' + sanitize(communeKeys[i]) + '</div>';
+    html += '<div style="font-size:10px;font-weight:800;color:#475569;margin-top:6px;text-transform:uppercase;">' + sanitize(_st.communeLabel[communeKeys[i]] || communeKeys[i]) + '</div>';
     html += '</div>';
   }
   html += '</div></div>';
@@ -4076,7 +4118,7 @@ async function exportDashPDF() {
   mouvLignes.labelA = FR ? 'SPI' : 'SPI';
   mouvLignes.labelB = FR ? 'Hors SPI' : 'Non-SPI';
   var comLignes = Object.keys(s.communeSplit)
-    .map(function (k) { var g = s.communeSplit[k]; return { label: k, total: g.total, a: g.ces, b: g.autre }; })
+    .map(function (k) { var g = s.communeSplit[k]; return { label: s.communeLabel[k] || k, total: g.total, a: g.ces, b: g.autre }; })
     .sort(function (a, b) { return b.total - a.total; })
     .slice(0, 10);
   comLignes.labelA = FR ? 'Cessions' : 'Disposals';
@@ -4090,9 +4132,16 @@ async function exportDashPDF() {
   }
   if (comLignes.length) {
     y = placePour(42, y, TITRE);
+    // Rappeler combien de communes existent : le tableau n'en montre que dix,
+    // et l'écart avec l'indicateur de tête se lisait comme une incohérence.
+    var nbCom = Object.keys(s.communesSet).length;
+    var amorce = comLignes.length < nbCom
+      ? (FR ? 'Les ' + comLignes.length + ' premières des ' + _pdfNum(nbCom) + ' communes ayant connu un mouvement sur la période. '
+            : 'The top ' + comLignes.length + ' of ' + _pdfNum(nbCom) + ' municipalities with movements over the period. ')
+      : '';
     y = tableBarres(FR ? 'Top 10 des communes' : 'Top 10 municipalities',
-      FR ? 'La barre sépare les cessions du reste des mouvements.'
-         : 'The bar splits disposals from the other movements.',
+      amorce + (FR ? 'La barre sépare les cessions du reste des mouvements.'
+                   : 'The bar splits disposals from the other movements.'),
       comLignes, CES, AUTRE, y);
   }
 
