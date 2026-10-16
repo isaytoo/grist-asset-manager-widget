@@ -25,7 +25,7 @@ var currentLang = 'fr';
 // Version affichée en haut à droite. À incrémenter en même temps que le
 // ?v= de index.html : si les deux divergent, l'interface annonce une version
 // que le navigateur n'a pas forcément chargée.
-var WIDGET_VERSION = 'v59';
+var WIDGET_VERSION = 'v60';
 var currentUserEmail = '';
 var userAllowedTabs = []; // Tabs allowed for current user based on BM_Permissions
 var searchPage = 1;
@@ -4267,8 +4267,9 @@ function renderImportView() {
   // Archive de sécurité + restauration
   html += '<div style="margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0;">';
   html += '<h4 style="font-weight:800;margin-bottom:6px;">🗄️ ' + (currentLang === 'fr' ? 'Archive de sécurité' : 'Safety archive') + '</h4>';
-  html += '<p style="font-size:12px;color:#64748b;margin-bottom:10px;">' + (currentLang === 'fr' ? 'Un instantané est pris automatiquement avant un import en mode « Remplacer » et avant une restauration. Les ' + ARCHIVE_MAX + ' plus récents sont conservés.' : 'A snapshot is taken automatically before a "Replace" import and before a restore. The ' + ARCHIVE_MAX + ' most recent ones are kept.') + '</p>';
+  html += '<p style="font-size:12px;color:#64748b;margin-bottom:10px;">' + (currentLang === 'fr' ? 'Un instantané est pris automatiquement avant un import en mode « Remplacer » et avant une restauration. Les ' + ARCHIVE_MAX + ' plus récents sont conservés. Si vos données sont déjà en place, prenez-en un dès maintenant : rien n\'en protège tant qu\'aucune de ces deux opérations n\'a eu lieu.' : 'A snapshot is taken automatically before a "Replace" import and before a restore. The ' + ARCHIVE_MAX + ' most recent ones are kept. If your data is already in place, take one now: nothing protects it until one of those two operations happens.') + '</p>';
   html += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
+  html += '<button class="btn btn-secondary" onclick="creerInstantane()" id="snap-btn">📸 ' + (currentLang === 'fr' ? 'Créer un instantané maintenant' : 'Take a snapshot now') + '</button>';
   html += '<select id="archive-select" style="padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;min-width:260px;"><option value="">' + (currentLang === 'fr' ? 'Chargement…' : 'Loading…') + '</option></select>';
   html += '<button class="btn btn-secondary" onclick="restoreFromArchive()" id="restore-btn">♻️ ' + (currentLang === 'fr' ? 'Restaurer cet instantané' : 'Restore this snapshot') + '</button>';
   html += '</div>';
@@ -4752,6 +4753,37 @@ async function restoreFromArchive(tsVoulu) {
     remplirSelectArchives();
   } catch (e) {
     if (resEl) resEl.innerHTML = '<span style="color:#dc2626;">❌ ' + e.message + '</span>';
+    showToast('Erreur: ' + e.message, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+/**
+ * Instantané à la demande.
+ *
+ * Les instantanés automatiques ne se déclenchent qu'avant un import en mode
+ * « Remplacer » ou une restauration. Sur un document déjà en service, les
+ * données en place n'en avaient donc aucun : rien ne permettait de protéger
+ * l'existant sans déclencher l'opération risquée elle-même.
+ */
+async function creerInstantane() {
+  if (!canManage) { showToast(t('accessDenied'), 'error'); return; }
+  var res = document.getElementById('restore-result');
+  var btn = document.getElementById('snap-btn');
+  if (!biens.length) {
+    if (res) res.innerHTML = '<span style="color:#64748b;">' + (currentLang === 'fr' ? 'Aucune donnée à archiver.' : 'No data to archive.') + '</span>';
+    return;
+  }
+  if (btn) btn.disabled = true;
+  if (res) res.innerHTML = '⏳ ' + (currentLang === 'fr' ? 'Création de l\'instantané…' : 'Creating snapshot…');
+  try {
+    var n = await archiveCurrentBiens(currentLang === 'fr' ? 'Instantané manuel' : 'Manual snapshot');
+    if (res) res.innerHTML = '<span style="color:#22c55e;font-weight:700;">✅ ' + n + (currentLang === 'fr' ? ' bien(s) archivé(s).' : ' asset(s) archived.') + '</span>';
+    showToast((currentLang === 'fr' ? 'Instantané créé : ' : 'Snapshot created: ') + n, 'success');
+    await remplirSelectArchives();
+  } catch (e) {
+    if (res) res.innerHTML = '<span style="color:#dc2626;">❌ ' + e.message + '</span>';
     showToast('Erreur: ' + e.message, 'error');
   } finally {
     if (btn) btn.disabled = false;
