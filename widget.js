@@ -25,7 +25,7 @@ var currentLang = 'fr';
 // Version affichée en haut à droite. À incrémenter en même temps que le
 // ?v= de index.html : si les deux divergent, l'interface annonce une version
 // que le navigateur n'a pas forcément chargée.
-var WIDGET_VERSION = 'v58';
+var WIDGET_VERSION = 'v59';
 var currentUserEmail = '';
 var userAllowedTabs = []; // Tabs allowed for current user based on BM_Permissions
 var searchPage = 1;
@@ -3584,7 +3584,7 @@ function _pdfM2(n) { return _pdfNum(n) + ' m²'; }
  * que la session en cours.
  */
 var _pdfSeq = {};
-function _nomFichierPdf(base) {
+function _nomFichierPdf(base, ext) {
   var d = new Date();
   var jour = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
   var cle = 'amw_pdfseq_' + base + '_' + jour;
@@ -3601,7 +3601,7 @@ function _nomFichierPdf(base) {
       if (k && k.indexOf('amw_pdfseq_') === 0 && k.slice(-(jour.length + 1)) !== '_' + jour) localStorage.removeItem(k);
     }
   } catch (e) {}
-  return base + '_' + jour + '_' + ('0' + n).slice(-2) + '.pdf';
+  return base + '_' + jour + '_' + ('0' + n).slice(-2) + '.' + (ext || 'pdf');
 }
 
 /**
@@ -4178,6 +4178,28 @@ var EXCEL_COL_MAP = {
   'Observations': 'Observation'
 };
 
+/**
+ * Tout libellé que l'on EXPORTE doit être reconnu à l'import.
+ *
+ * Sept colonnes ne l'étaient pas : « Surface bâti (m²) », « Réf. Parcelles »,
+ * « Nom OFA / OFT », « Temps portage / Année fin », « Surface pour assurance
+ * (m²) », « Surface parcelle (m²) » et « Date d'intégration GIMA » sortaient
+ * sous un libellé absent de la table ci-dessus. Un fichier de sauvegarde
+ * réimporté revenait donc avec ces champs vides — une sauvegarde qui perd des
+ * données en silence est pire que pas de sauvegarde.
+ *
+ * On complète la correspondance depuis BIEN_COLUMNS, ce qui la maintient juste
+ * même si un libellé change plus tard.
+ */
+(function () {
+  for (var i = 0; i < BIEN_COLUMNS.length; i++) {
+    var c = BIEN_COLUMNS[i];
+    if (c.label_fr && !EXCEL_COL_MAP[c.label_fr]) EXCEL_COL_MAP[c.label_fr] = c.id;
+    if (c.label_en && !EXCEL_COL_MAP[c.label_en]) EXCEL_COL_MAP[c.label_en] = c.id;
+    if (!EXCEL_COL_MAP[c.id]) EXCEL_COL_MAP[c.id] = c.id;   // en-tête technique
+  }
+})();
+
 var importParsedRows = [];
 var importMappedCols = 0;
 var importMode = 'update'; // 'replace', 'append', 'update'
@@ -4245,9 +4267,20 @@ function renderImportView() {
   // Archive de sécurité + restauration
   html += '<div style="margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0;">';
   html += '<h4 style="font-weight:800;margin-bottom:6px;">🗄️ ' + (currentLang === 'fr' ? 'Archive de sécurité' : 'Safety archive') + '</h4>';
-  html += '<p style="font-size:12px;color:#64748b;margin-bottom:10px;">' + (currentLang === 'fr' ? 'Avant chaque import en mode « Remplacer », la table est automatiquement sauvegardée (dernier instantané). Vous pouvez la restaurer ici si besoin.' : 'Before each "Replace" import, the table is automatically backed up (last snapshot). You can restore it here.') + '</p>';
-  html += '<button class="btn btn-secondary" onclick="restoreFromArchive()" id="restore-btn">♻️ ' + (currentLang === 'fr' ? 'Restaurer la dernière archive' : 'Restore last archive') + '</button>';
+  html += '<p style="font-size:12px;color:#64748b;margin-bottom:10px;">' + (currentLang === 'fr' ? 'Un instantané est pris automatiquement avant un import en mode « Remplacer » et avant une restauration. Les ' + ARCHIVE_MAX + ' plus récents sont conservés.' : 'A snapshot is taken automatically before a "Replace" import and before a restore. The ' + ARCHIVE_MAX + ' most recent ones are kept.') + '</p>';
+  html += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
+  html += '<select id="archive-select" style="padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;min-width:260px;"><option value="">' + (currentLang === 'fr' ? 'Chargement…' : 'Loading…') + '</option></select>';
+  html += '<button class="btn btn-secondary" onclick="restoreFromArchive()" id="restore-btn">♻️ ' + (currentLang === 'fr' ? 'Restaurer cet instantané' : 'Restore this snapshot') + '</button>';
+  html += '</div>';
   html += '<div id="restore-result" style="margin-top:8px;font-size:13px;"></div>';
+  html += '</div>';
+
+  // Sauvegarde complète : aucun des exports existants ne donnait la table
+  // entière, ils suivent tous la recherche ou la vue courante.
+  html += '<div style="margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0;">';
+  html += '<h4 style="font-weight:800;margin-bottom:6px;">💾 ' + (currentLang === 'fr' ? 'Sauvegarde complète' : 'Full backup') + '</h4>';
+  html += '<p style="font-size:12px;color:#64748b;margin-bottom:10px;">' + (currentLang === 'fr' ? 'Exporte la totalité des biens, toutes colonnes, sans tenir compte des filtres ni de la vue. Le fichier obtenu se réimporte ici même en mode « Remplacer » : c\'est le recours si les données en place sont corrompues. Conservez-le hors du document Grist.' : 'Exports every asset with all columns, ignoring filters and the current view. The file can be re-imported here in "Replace" mode: that is the fallback if the live data is corrupted. Keep it outside the Grist document.') + '</p>';
+  html += '<button class="btn btn-secondary" onclick="exportToutesDonnees()" id="export-all-btn">💾 ' + (currentLang === 'fr' ? 'Exporter toutes les données' : 'Export all data') + '</button>';
   html += '</div>';
 
   html += '</div>';
@@ -4260,6 +4293,8 @@ function renderImportView() {
 
   // Setup drag and drop
   setTimeout(setupDropZone, 100);
+  // La liste des instantanés se lit dans le document : elle arrive après le rendu.
+  remplirSelectArchives();
 }
 
 function setupDropZone() {
@@ -4453,7 +4488,7 @@ async function executeImport() {
         try {
           var pt = document.getElementById('import-progress-text');
           if (pt) pt.textContent = currentLang === 'fr' ? 'Archivage de sécurité…' : 'Safety archive…';
-          await archiveCurrentBiens();
+          await archiveCurrentBiens(currentLang === 'fr' ? 'Avant import (remplacer)' : 'Before replace import');
         } catch (archErr) { console.warn('Archivage impossible:', archErr.message); }
       }
       // Delete all existing records
@@ -4552,6 +4587,15 @@ async function executeImport() {
 }
 
 // ── Archive de sécurité (instantané unique) ──
+/**
+ * Nombre d'instantanés conservés.
+ *
+ * Un seul était gardé : un second import en mode « Remplacer » écrasait le
+ * filet de sécurité du premier, et l'état antérieur était perdu. On en garde
+ * plusieurs, sans excès — chaque instantané pèse autant de lignes que la table.
+ */
+var ARCHIVE_MAX = 3;
+
 async function ensureArchiveTable() {
   var tables = await grist.docApi.listTables();
   if (tables.indexOf(ARCHIVE_TABLE) === -1) {
@@ -4560,9 +4604,19 @@ async function ensureArchiveTable() {
       cols.push({ id: BIEN_COLUMNS[i].id, fields: { type: 'Text', label: BIEN_COLUMNS[i].label_fr } });
     }
     cols.push({ id: 'Archive_Date', fields: { type: 'DateTime', label: 'Date archivage' } });
+    cols.push({ id: 'Archive_Motif', fields: { type: 'Text', label: 'Motif' } });
     await grist.docApi.applyUserActions([['AddTable', ARCHIVE_TABLE, cols]]);
+    return;
   }
+  // Colonne ajoutée après coup : les documents déjà en service ne l'ont pas.
+  try {
+    var t = await grist.docApi.fetchTable(ARCHIVE_TABLE);
+    if (t && t.Archive_Motif === undefined) {
+      await grist.docApi.applyUserActions([['AddColumn', ARCHIVE_TABLE, 'Archive_Motif', { type: 'Text' }]]);
+    }
+  } catch (e) { console.warn('Archive_Motif:', e.message); }
 }
+
 async function fetchArchiveRows() {
   var d = await grist.docApi.fetchTable(ARCHIVE_TABLE);
   if (!d || !d.id) return [];
@@ -4575,54 +4629,115 @@ async function fetchArchiveRows() {
   }
   return rows;
 }
-// Remplace l'archive par un instantané des biens actuels (un seul instantané conservé)
-async function archiveCurrentBiens() {
-  await ensureArchiveTable();
+
+/** Instantanés disponibles, du plus récent au plus ancien. */
+async function listerArchives() {
+  try { await ensureArchiveTable(); } catch (e) { return []; }
+  var rows = await fetchArchiveRows();
+  var parTs = {};
+  rows.forEach(function (r) {
+    var ts = Number(r.Archive_Date) || 0;
+    if (!parTs[ts]) parTs[ts] = { ts: ts, motif: r.Archive_Motif || '', nb: 0 };
+    parTs[ts].nb++;
+  });
+  return Object.keys(parTs).map(function (k) { return parTs[k]; })
+    .sort(function (a, b) { return b.ts - a.ts; });
+}
+
+/** Supprime les instantanés au-delà des ARCHIVE_MAX plus récents. */
+async function purgerArchives() {
+  var rows = await fetchArchiveRows();
+  var tsVus = {};
+  rows.forEach(function (r) { tsVus[Number(r.Archive_Date) || 0] = 1; });
+  var garder = Object.keys(tsVus).map(Number).sort(function (a, b) { return b - a; }).slice(0, ARCHIVE_MAX);
+  var aSupprimer = rows.filter(function (r) { return garder.indexOf(Number(r.Archive_Date) || 0) === -1; })
+    .map(function (r) { return r.id; });
   var B = 50;
-  // Vider l'archive existante
-  var ex = await grist.docApi.fetchTable(ARCHIVE_TABLE);
-  var ids = (ex && ex.id) ? ex.id : [];
-  for (var i = 0; i < ids.length; i += B) {
-    await grist.docApi.applyUserActions(ids.slice(i, i + B).map(function(id) { return ['RemoveRecord', ARCHIVE_TABLE, id]; }));
+  for (var i = 0; i < aSupprimer.length; i += B) {
+    await grist.docApi.applyUserActions(aSupprimer.slice(i, i + B).map(function (id) { return ['RemoveRecord', ARCHIVE_TABLE, id]; }));
   }
-  // Copier les biens actuels
+  return aSupprimer.length;
+}
+
+/** Ajoute un instantané des biens actuels, sans toucher aux précédents. */
+async function archiveCurrentBiens(motif) {
+  await ensureArchiveTable();
+  if (!biens.length) return 0;
+  var B = 50;
+  // Archive_Date est à la seconde : deux archivages rapprochés — typiquement
+  // l'instantané de sécurité juste avant une restauration — recevaient le même
+  // horodatage et se mélangeaient en un seul instantané, qui réunissait alors
+  // deux états différents de la table. On force un horodatage strictement
+  // supérieur à ceux déjà présents.
   var now = Math.floor(Date.now() / 1000);
+  var dejaVus = await listerArchives();
+  if (dejaVus.length && dejaVus[0].ts >= now) now = dejaVus[0].ts + 1;
   var fields = BIEN_COLUMNS.map(function(c) { return c.id; });
   for (var i = 0; i < biens.length; i += B) {
     var acts = biens.slice(i, i + B).map(function(b) {
       var rec = {};
       for (var f = 0; f < fields.length; f++) rec[fields[f]] = b[fields[f]] != null ? b[fields[f]] : '';
       rec.Archive_Date = now;
+      rec.Archive_Motif = motif || '';
       return ['AddRecord', ARCHIVE_TABLE, null, rec];
     });
     if (acts.length) await grist.docApi.applyUserActions(acts);
   }
+  await purgerArchives();
   return biens.length;
 }
-async function restoreFromArchive() {
+
+/**
+ * Restaure un instantané.
+ *
+ * La restauration est elle-même une suppression en masse : elle vidait la table
+ * courante sans rien sauvegarder, si bien qu'une restauration déclenchée par
+ * erreur détruisait définitivement les données en place. On archive donc l'état
+ * courant d'abord.
+ *
+ * Les lignes à restaurer sont lues AVANT cet archivage : la purge qui suit
+ * pourrait écarter l'instantané visé, on le tient déjà en mémoire.
+ */
+async function restoreFromArchive(tsVoulu) {
   if (!canManage) { showToast(t('accessDenied'), 'error'); return; }
   var resEl = document.getElementById('restore-result');
   var btn = document.getElementById('restore-btn');
-  var rows;
-  try { await ensureArchiveTable(); rows = await fetchArchiveRows(); }
+  var toutes;
+  try { await ensureArchiveTable(); toutes = await fetchArchiveRows(); }
   catch (e) { showToast('Erreur: ' + e.message, 'error'); return; }
-  if (!rows.length) {
+  if (!toutes.length) {
     if (resEl) resEl.innerHTML = '<span style="color:#64748b;">' + (currentLang === 'fr' ? 'Aucune archive disponible.' : 'No archive available.') + '</span>';
     showToast(currentLang === 'fr' ? 'Aucune archive' : 'No archive', 'info');
     return;
   }
-  var snap = rows[0].Archive_Date ? formatDateFR(new Date(rows[0].Archive_Date * 1000)) : '';
-  if (!confirm((currentLang === 'fr' ? 'Restaurer ' : 'Restore ') + rows.length + (currentLang === 'fr' ? ' bien(s) archivé(s)' : ' archived asset(s)') + (snap ? (currentLang === 'fr' ? ' du ' : ' from ') + snap : '') + ' ?\n' + (currentLang === 'fr' ? 'Le contenu actuel de la table sera REMPLACÉ.' : 'Current table content will be REPLACED.'))) return;
+  var sel = document.getElementById('archive-select');
+  var ts = Number(tsVoulu || (sel && sel.value) || 0);
+  if (!ts) {
+    ts = toutes.reduce(function (m, r) { return Math.max(m, Number(r.Archive_Date) || 0); }, 0);
+  }
+  var rows = toutes.filter(function (r) { return (Number(r.Archive_Date) || 0) === ts; });
+  if (!rows.length) { showToast(currentLang === 'fr' ? 'Instantané introuvable' : 'Snapshot not found', 'error'); return; }
+
+  var snap = ts ? formatDateFR(new Date(ts * 1000)) : '';
+  var motif = rows[0].Archive_Motif || '';
+  if (!confirm((currentLang === 'fr' ? 'Restaurer ' : 'Restore ') + rows.length
+      + (currentLang === 'fr' ? ' bien(s) archivé(s)' : ' archived asset(s)')
+      + (snap ? (currentLang === 'fr' ? ' du ' : ' from ') + snap : '') + (motif ? ' (' + motif + ')' : '') + ' ?\n'
+      + (currentLang === 'fr'
+          ? 'Le contenu actuel de la table sera REMPLACÉ. Il est archivé avant, et restera restaurable.'
+          : 'Current table content will be REPLACED. It is archived first and stays restorable.'))) return;
+
   if (btn) btn.disabled = true;
   if (resEl) resEl.innerHTML = '⏳ ' + (currentLang === 'fr' ? 'Restauration en cours…' : 'Restoring…');
   try {
     var B = 50, fields = BIEN_COLUMNS.map(function(c) { return c.id; });
-    // Vider la table courante
+    // Filet avant d'effacer : la restauration est une suppression en masse.
+    try { await archiveCurrentBiens(currentLang === 'fr' ? 'Avant restauration' : 'Before restore'); }
+    catch (e) { console.warn('Archivage avant restauration impossible:', e.message); }
     var curIds = biens.map(function(b) { return b.id; });
     for (var i = 0; i < curIds.length; i += B) {
       await grist.docApi.applyUserActions(curIds.slice(i, i + B).map(function(id) { return ['RemoveRecord', BIENS_TABLE, id]; }));
     }
-    // Réinjecter l'archive
     for (var i = 0; i < rows.length; i += B) {
       var acts = rows.slice(i, i + B).map(function(r) {
         var rec = {};
@@ -4634,11 +4749,69 @@ async function restoreFromArchive() {
     if (resEl) resEl.innerHTML = '<span style="color:#22c55e;font-weight:700;">✅ ' + rows.length + (currentLang === 'fr' ? ' bien(s) restauré(s).' : ' asset(s) restored.') + '</span>';
     showToast((currentLang === 'fr' ? 'Restauration : ' : 'Restored: ') + rows.length, 'success');
     await loadAllData();
+    remplirSelectArchives();
   } catch (e) {
-    if (resEl) resEl.innerHTML = '<span style="color:#ef4444;">❌ ' + sanitize(e.message) + '</span>';
+    if (resEl) resEl.innerHTML = '<span style="color:#dc2626;">❌ ' + e.message + '</span>';
     showToast('Erreur: ' + e.message, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
   }
-  if (btn) btn.disabled = false;
+}
+
+/** Remplit la liste déroulante des instantanés disponibles. */
+async function remplirSelectArchives() {
+  var sel = document.getElementById('archive-select');
+  if (!sel) return;
+  var liste = await listerArchives();
+  if (!liste.length) {
+    sel.innerHTML = '<option value="">' + (currentLang === 'fr' ? 'Aucun instantané' : 'No snapshot') + '</option>';
+    sel.disabled = true;
+    return;
+  }
+  sel.disabled = false;
+  sel.innerHTML = liste.map(function (a) {
+    var d = a.ts ? formatDateFR(new Date(a.ts * 1000)) : '?';
+    var h = a.ts ? new Date(a.ts * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';
+    return '<option value="' + a.ts + '">' + d + (h ? ' ' + h : '') + ' — ' + a.nb
+      + (currentLang === 'fr' ? ' bien(s)' : ' asset(s)') + (a.motif ? ' · ' + sanitize(a.motif) : '') + '</option>';
+  }).join('');
+}
+
+/**
+ * Exporte l'intégralité de BM_Biens, indépendamment des filtres et de la vue.
+ *
+ * Les exports existants suivent la recherche ou la vue courante : aucun ne
+ * donnait la table entière, qui est pourtant ce qu'il faut pour reconstituer
+ * les données. Les en-têtes sont ceux que l'import reconnaît, le fichier est
+ * donc réinjectable tel quel en mode « Remplacer ».
+ */
+function exportToutesDonnees() {
+  if (!biens.length) {
+    showToast(currentLang === 'fr' ? 'Aucune donnée à exporter' : 'No data to export', 'error');
+    return;
+  }
+  var headers = [], fields = [];
+  for (var c = 0; c < BIEN_COLUMNS.length; c++) {
+    headers.push(BIEN_COLUMNS[c].label_fr);     // libellé FR : celui que l'import attend
+    fields.push(BIEN_COLUMNS[c].id);
+  }
+  var rows = [headers];
+  for (var i = 0; i < biens.length; i++) {
+    var r = [];
+    for (var f = 0; f < fields.length; f++) {
+      var v = biens[i][fields[f]];
+      r.push(v == null ? '' : v);
+    }
+    rows.push(r);
+  }
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = headers.map(function (h) { return { wch: Math.min(Math.max(h.length + 2, 12), 40) }; });
+  ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length - 1, c: headers.length - 1 } }) };
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Biens');
+  XLSX.writeFile(wb, _nomFichierPdf('sauvegarde-biens', 'xlsx'));
+  showToast((currentLang === 'fr' ? 'Sauvegarde : ' : 'Backup: ') + biens.length
+    + (currentLang === 'fr' ? ' bien(s) exporté(s)' : ' asset(s) exported'), 'success');
 }
 
 async function fixExistingDates() {
