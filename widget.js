@@ -25,7 +25,7 @@ var currentLang = 'fr';
 // Version affichée en haut à droite. À incrémenter en même temps que le
 // ?v= de index.html : si les deux divergent, l'interface annonce une version
 // que le navigateur n'a pas forcément chargée.
-var WIDGET_VERSION = 'v55';
+var WIDGET_VERSION = 'v56';
 var currentUserEmail = '';
 var userAllowedTabs = []; // Tabs allowed for current user based on BM_Permissions
 var searchPage = 1;
@@ -2827,9 +2827,25 @@ function buildLineChart(acqData, cesData, deltaData, monthLabels) {
  * et l'analyse des surfaces ne porte que sur les biens en gestion SPI.
  * Dupliquer ce calcul aurait laissé les deux vues diverger en silence.
  */
+/**
+ * Clé de regroupement d'un libellé de mouvement.
+ *
+ * Les saisies mélangent « ACQUISITION », « Acquisition » et « acquisition »,
+ * qui apparaissaient comme trois lignes distinctes dans la répartition. On
+ * regroupe sur le libellé sans accent ni casse, espaces compactés.
+ */
+function cleMouvement(v) {
+  return normSearchText(v).replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
 function computeDashStats(filtered) {
   var totalBiens = filtered.length;
   var communesSet = {};
+  // Regroupements ajoutés pour le PDF : mouvements dédoublonnés et répartition
+  // SPI / hors SPI, cessions / reste, que les compteurs bruts ne portaient pas.
+  var mouvGroupe = {};
+  var communeSplit = {};
+  var nbAcqSPI = 0, nbCesSPI = 0, nbBatiSPI = 0, nbNonBatiSPI = 0;
   var surfaceParcelle = 0;
   var surfaceBati = 0;
   var mouvementCount = {};
@@ -2854,15 +2870,31 @@ function computeDashStats(filtered) {
     var isSPI = String(b.Gestion_SPI || '').toUpperCase() === 'OUI';
     var isCes = mouv.indexOf('CESSION') !== -1;
 
+    if (b.Mouvement) {
+      var km = cleMouvement(b.Mouvement);
+      if (!mouvGroupe[km]) mouvGroupe[km] = { label: km, spi: 0, hors: 0, total: 0 };
+      mouvGroupe[km].total++;
+      if (isSPI) mouvGroupe[km].spi++; else mouvGroupe[km].hors++;
+    }
+    if (b.Commune) {
+      if (!communeSplit[b.Commune]) communeSplit[b.Commune] = { ces: 0, autre: 0, total: 0 };
+      communeSplit[b.Commune].total++;
+      if (isCes) communeSplit[b.Commune].ces++; else communeSplit[b.Commune].autre++;
+    }
+
     // Surface analysis: SPI only, totalSurface = surfaceBati + surfaceParcelle per item
     if (isSPI) {
       var totalSurfItem = sb + sp; // Both can be negative for cessions
       surfBatiSPI += sb;
       surfNonBatiSPI += sp;
+      if (sb !== 0) nbBatiSPI++;
+      if (sp !== 0) nbNonBatiSPI++;
       if (isCes) {
         surfCedee += totalSurfItem;
+        nbCesSPI++;
       } else {
         surfAcquise += totalSurfItem;
+        nbAcqSPI++;
       }
     }
 
@@ -2879,7 +2911,9 @@ function computeDashStats(filtered) {
   return { totalBiens: totalBiens, communesSet: communesSet, surfaceParcelle: surfaceParcelle,
     surfaceBati: surfaceBati, mouvementCount: mouvementCount, communeCount: communeCount,
     spiAcq: spiAcq, spiCes: spiCes, noSpiAcq: noSpiAcq, noSpiCes: noSpiCes,
-    surfAcquise: surfAcquise, surfCedee: surfCedee, surfBatiSPI: surfBatiSPI, surfNonBatiSPI: surfNonBatiSPI };
+    surfAcquise: surfAcquise, surfCedee: surfCedee, surfBatiSPI: surfBatiSPI, surfNonBatiSPI: surfNonBatiSPI,
+    mouvGroupe: mouvGroupe, communeSplit: communeSplit,
+    nbAcqSPI: nbAcqSPI, nbCesSPI: nbCesSPI, nbBatiSPI: nbBatiSPI, nbNonBatiSPI: nbNonBatiSPI };
 }
 
 function renderDashboardView() {
@@ -3581,18 +3615,39 @@ function _imageDepuisDataUri(uri) {
 }
 
 /** Libellé lisible de la période retenue par les filtres temporels. */
+/**
+ * Libellé lisible de la période retenue par les filtres temporels.
+ *
+ * Sélectionner une année entière affichait la liste de ses douze mois, ou
+ * « Toutes années » quand aucun mois n'était coché : illisible dans un cas,
+ * faux dans l'autre. Une année complète se dit « Année 2026 ».
+ */
 function _pdfPeriode() {
-  var noms = currentLang === 'fr'
+  var FR = currentLang === 'fr';
+  var noms = FR
     ? ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']
     : ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-  var an = dashFilterYears.length
-    ? dashFilterYears.slice().sort().join(', ')
-    : (currentLang === 'fr' ? 'Toutes années' : 'All years');
-  if (!dashFilterMonths.length) return an;
-  var mo = dashFilterMonths.slice().sort(function (a, b) { return parseInt(a, 10) - parseInt(b, 10); })
-    .map(function (m) { return noms[parseInt(m, 10) - 1]; }).join(', ');
-  return an + ' — ' + mo;
+  var ans = dashFilterYears.slice().sort();
+  var anneeEntiere = !dashFilterMonths.length || dashFilterMonths.length === 12;
+
+  if (!ans.length) {
+    var tous = FR ? 'Toutes années' : 'All years';
+    if (anneeEntiere) return tous;
+    return tous + ' — ' + _pdfMois(noms);
+  }
+  if (anneeEntiere) {
+    return (FR ? (ans.length > 1 ? 'Années ' : 'Année ') : (ans.length > 1 ? 'Years ' : 'Year ')) + ans.join(', ');
+  }
+  return ans.join(', ') + ' — ' + _pdfMois(noms);
 }
+/** Mois cochés, dans l'ordre du calendrier. */
+function _pdfMois(noms) {
+  return dashFilterMonths.slice()
+    .sort(function (a, b) { return parseInt(a, 10) - parseInt(b, 10); })
+    .map(function (m) { return noms[parseInt(m, 10) - 1]; })
+    .join(', ');
+}
+
 
 /**
  * Export PDF A4 du tableau de bord, tel que les filtres temporels le donnent.
@@ -3606,13 +3661,13 @@ async function exportDashPDF() {
     return;
   }
   var FR = currentLang === 'fr';
-  var TITRE = FR ? 'Tableau de bord du patrimoine immobilier (SPI)' : 'Real estate portfolio dashboard (SPI)';
+  var TITRE = FR ? 'Mouvement du patrimoine immobilier' : 'Real estate portfolio movements';
   showToast(FR ? 'Génération du PDF...' : 'Generating PDF...', 'success');
 
   var filtered = getFilteredBiens();
   var s = computeDashStats(filtered);
 
-  // Évolution mensuelle SPI — même règle que l'écran
+  // Évolution mensuelle : biens en gestion SPI uniquement, comme à l'écran.
   var mAcq = [0,0,0,0,0,0,0,0,0,0,0,0], mCes = [0,0,0,0,0,0,0,0,0,0,0,0], mDelta = [0,0,0,0,0,0,0,0,0,0,0,0];
   for (var i = 0; i < filtered.length; i++) {
     var b = filtered[i];
@@ -3625,8 +3680,12 @@ async function exportDashPDF() {
   var mfl = FR ? ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc']
                : ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-  // Rastérisation x2 : une image de 400 px rendue sur 42 mm donne ~240 dpi,
-  // largement suffisant à l'impression, pour un fichier dix fois plus léger qu'en x3.
+  /* Palette de la répartition SPI — validée (bande de clarté, chroma, écart
+     deutan/protan/tritan sur toutes les paires). La teinte porte la nature de
+     l'acte, la clarté le fait qu'il soit géré ou non par le SPI : quatre verts
+     voisins, comme auparavant, ne se distinguaient pas. */
+  var C_ACQ_SPI = '#1d4ed8', C_ACQ_HORS = '#60a5fa', C_CES_SPI = '#c2410c', C_CES_HORS = '#fb923c';
+
   var SC = 2;
   var imgAcqCed = await _svgToPng(buildPieChart([
     { value: s.surfAcquise, color: '#22c55e', label: 'Surfaces acquises' },
@@ -3637,10 +3696,10 @@ async function exportDashPDF() {
     { value: s.surfNonBatiSPI, color: '#22c55e', label: 'Surface non bâti' }
   ], 200), SC);
   var imgSpiPie = await _svgToPng(buildPieChart([
-    { value: s.spiAcq, color: '#166534', label: 'SPI hors cession' },
-    { value: s.noSpiAcq, color: '#86efac', label: 'Hors SPI, hors cession' },
-    { value: s.spiCes, color: '#4d7c0f', label: 'SPI cession' },
-    { value: s.noSpiCes, color: '#d9f99d', label: 'Hors SPI cession' }
+    { value: s.spiAcq, color: C_ACQ_SPI, label: 'Acquisitions SPI' },
+    { value: s.noSpiAcq, color: C_ACQ_HORS, label: 'Acquisitions hors SPI' },
+    { value: s.spiCes, color: C_CES_SPI, label: 'Cessions SPI' },
+    { value: s.noSpiCes, color: C_CES_HORS, label: 'Cessions hors SPI' }
   ], 220, 'count'), SC);
   var imgSpiLine = await _svgToPng(buildLineChart(mAcq, mCes, mDelta, mfl), SC);
 
@@ -3650,12 +3709,11 @@ async function exportDashPDF() {
   var doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
   var PW = 210, PH = 297, M = 12, UW = PW - 2 * M;
   var INK = [15, 23, 42], MUTED = [100, 116, 139], LINE = [226, 232, 240];
-  // Rouge de la charte (#FE0032), relevé sur le logo : un second rouge voisin
-  // posé juste en dessous se verrait immédiatement.
-  var ROUGE = [254, 0, 50];
+  var ROUGE = [254, 0, 50];                 // rouge de la charte, relevé sur le logo
+  var FOND = [248, 250, 252];               // fond des panneaux
 
-  function carte(x, y, w, h) {
-    doc.setFillColor(255, 255, 255);
+  function carte(x, y, w, h, fond) {
+    if (fond) doc.setFillColor(fond[0], fond[1], fond[2]); else doc.setFillColor(255, 255, 255);
     doc.setDrawColor(LINE[0], LINE[1], LINE[2]);
     doc.setLineWidth(0.3);
     doc.roundedRect(x, y, w, h, 2.5, 2.5, 'FD');
@@ -3668,45 +3726,30 @@ async function exportDashPDF() {
     doc.text(txt, M + 4.5, yy);
     return yy + 5.5;
   }
-  /**
-   * Place une image au centre d'une boîte, à l'échelle qui y tient.
-   *
-   * Sans cette contrainte, la courbe (500x300) calée sur la largeur de sa carte
-   * en débordait par le bas et recouvrait le tableau suivant.
-   */
+  /** Note explicative sous un titre de section. */
+  function note(txt, yy) {
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.8);
+    doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+    doc.text(txt, M + 4.5, yy);
+    return yy + 4;
+  }
   function imageDansBoite(img, bx, by, bw, bh) {
     if (!img) {
-      // buildPieChart ne renvoie pas de SVG quand le total est nul : sans ce
-      // repli la carte restait vide, sans dire pourquoi.
       doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
       doc.setTextColor(148, 163, 184);
-      doc.text(FR ? 'Aucune donn\u00E9e' : 'No data', bx + bw / 2, by + bh / 2, { align: 'center' });
+      doc.text(FR ? 'Aucune donnée' : 'No data', bx + bw / 2, by + bh / 2, { align: 'center' });
       return;
     }
     var k = Math.min(bw / img.w, bh / img.h);
     var w = img.w * k, h = img.h * k;
-    doc.addImage(img.data, 'PNG', bx + (bw - w) / 2, by + (bh - h) / 2, w, h);
+    doc.addImage(img.data, img.fmt || 'PNG', bx + (bw - w) / 2, by + (bh - h) / 2, w, h);
   }
   /**
-   * Légende compacte : pastille de couleur + libellé.
+   * Bandeau de valeurs sous un camembert.
    *
-   * Indispensable ici : les camemberts et la courbe portent leurs valeurs mais
-   * pas le nom des séries, et la légende de la courbe est un bloc HTML placé
-   * HORS du SVG — elle est donc perdue à la rastérisation.
+   * La ligne « sub » donne le nombre de biens derrière la surface : une surface
+   * seule ne disait pas si elle venait d'une grosse opération ou de cinquante.
    */
-  function legende(x, yy, w, items, cols) {
-    cols = cols || 1;
-    var cw = w / cols, lh = 4.2;
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.3);
-    for (var k = 0; k < items.length; k++) {
-      var cx = x + (k % cols) * cw, cy = yy + Math.floor(k / cols) * lh;
-      doc.setFillColor(items[k].c[0], items[k].c[1], items[k].c[2]);
-      doc.circle(cx + 1.2, cy - 0.9, 1.05, 'F');
-      doc.setTextColor(71, 85, 105);
-      doc.text(items[k].t, cx + 3.4, cy);
-    }
-  }
-  /** Bandeau de 3 valeurs sous un camembert (libellé coloré, valeur en encre). */
   function bandeau(x, yy, w, cols) {
     var cw = w / cols.length;
     for (var k = 0; k < cols.length; k++) {
@@ -3717,14 +3760,57 @@ async function exportDashPDF() {
       doc.text(cols[k].t, x + k * cw + cw / 2, yy + 3.6, { align: 'center' });
       doc.setFontSize(8.4);
       doc.setTextColor(INK[0], INK[1], INK[2]);
-      doc.text(cols[k].v, x + k * cw + cw / 2, yy + 10.4, { align: 'center' });
+      doc.text(cols[k].v, x + k * cw + cw / 2, yy + 10.2, { align: 'center' });
+      if (cols[k].sub) {
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(6.4);
+        doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+        doc.text(cols[k].sub, x + k * cw + cw / 2, yy + 14.4, { align: 'center' });
+      }
     }
+  }
+  /** Pastille + libellé, en une ou plusieurs colonnes. */
+  function legende(x, yy, w, items, cols) {
+    cols = cols || 1;
+    var cw = w / cols, lh = 4.2;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.3);
+    for (var k = 0; k < items.length; k++) {
+      var cx = x + (k % cols) * cw, cy = yy + Math.floor(k / cols) * lh;
+      var rgb = typeof items[k].c === 'string' ? _hexRgb(items[k].c) : items[k].c;
+      doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+      doc.circle(cx + 1.2, cy - 0.9, 1.05, 'F');
+      doc.setTextColor(71, 85, 105);
+      doc.text(items[k].t, cx + 3.4, cy);
+    }
+  }
+  /** En-tête allégé des pages suivantes. */
+  function enteteSuite(titre) {
+    doc.setFillColor(ROUGE[0], ROUGE[1], ROUGE[2]);
+    doc.rect(0, 16, PW, 0.8, 'F');
+    var tx2 = M;
+    if (logo) {
+      var l2H = 9, l2W = l2H * (logo.w / logo.h);
+      if (l2W > 30) { l2W = 30; l2H = l2W * (logo.h / logo.w); }
+      doc.addImage(logo.data, logo.fmt || 'PNG', M, (16 - l2H) / 2, l2W, l2H);
+      tx2 = M + l2W + 5;
+    }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+    doc.text(titre, tx2, 10.5);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+    doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+    doc.text(_pdfPeriode(), PW - M, 10.5, { align: 'right' });
+    return 26;
+  }
+  /** Ajoute une page quand le bloc à venir ne tient plus. */
+  function placePour(h, yy, titreSuite) {
+    if (yy + h <= PH - 18) return yy;
+    doc.addPage();
+    return enteteSuite(titreSuite);
   }
 
   // ===== EN-TÊTE =====
   // Fond blanc : un aplat sombre derrière le logo de la collectivité en
   // dénaturerait les couleurs, ce que la charte graphique n'autorise pas.
-  // Le filet rouge suffit à poser l'en-tête.
   var hHead = 28;
   doc.setFillColor(ROUGE[0], ROUGE[1], ROUGE[2]);
   doc.rect(0, hHead, PW, 1, 'F');
@@ -3732,7 +3818,7 @@ async function exportDashPDF() {
   if (logo) {
     var lgH = 14, lgW = lgH * (logo.w / logo.h);
     if (lgW > 48) { lgW = 48; lgH = lgW * (logo.h / logo.w); }
-    doc.addImage(logo.data, logo.fmt, M, (hHead - lgH) / 2, lgW, lgH);
+    doc.addImage(logo.data, logo.fmt || 'PNG', M, (hHead - lgH) / 2, lgW, lgH);
     tx = M + lgW + 7;
     doc.setDrawColor(LINE[0], LINE[1], LINE[2]); doc.setLineWidth(0.3);
     doc.line(tx - 3.5, 6, tx - 3.5, hHead - 6);
@@ -3746,152 +3832,187 @@ async function exportDashPDF() {
   doc.setFontSize(8);
   doc.text((FR ? 'Généré le ' : 'Generated ') + new Date().toLocaleDateString('fr-FR'), PW - M, 19.5, { align: 'right' });
 
-  var y = 38;
+  var y = 37;
 
-  // ===== INDICATEURS =====
+  // ===== INDICATEURS, sur un panneau coloré pour les détacher du reste =====
+  var hKpi = 23;
+  doc.setFillColor(FOND[0], FOND[1], FOND[2]);
+  doc.setDrawColor(LINE[0], LINE[1], LINE[2]); doc.setLineWidth(0.3);
+  doc.roundedRect(M, y, UW, hKpi, 2.5, 2.5, 'FD');
   var kpis = [
     { v: _pdfNum(s.totalBiens), l: FR ? 'BIENS' : 'ASSETS', c: ROUGE },
     { v: _pdfNum(Object.keys(s.communesSet).length), l: 'COMMUNES', c: [59, 130, 246] },
     { v: _pdfM2(s.surfaceParcelle), l: FR ? 'SURFACE PARCELLE' : 'PARCEL AREA', c: [34, 197, 94] },
-    { v: _pdfM2(s.surfaceBati), l: FR ? 'SURFACE B\u00C2TIE' : 'BUILT AREA', c: [217, 119, 6] }
+    { v: _pdfM2(s.surfaceBati), l: FR ? 'SURFACE BÂTIE' : 'BUILT AREA', c: [217, 119, 6] }
   ];
-  var kw = (UW - 3 * 3) / 4;
+  var kw = UW / 4;
   for (var i = 0; i < kpis.length; i++) {
-    var kx = M + i * (kw + 3);
-    carte(kx, y, kw, 20);
+    var kx = M + i * kw;
+    if (i) { doc.setDrawColor(LINE[0], LINE[1], LINE[2]); doc.line(kx, y + 4, kx, y + hKpi - 4); }
     doc.setFillColor(kpis[i].c[0], kpis[i].c[1], kpis[i].c[2]);
-    doc.roundedRect(kx + 3.5, y + 3.6, 6, 1.4, 0.7, 0.7, 'F');
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
+    doc.roundedRect(kx + 5, y + 4.6, 6, 1.4, 0.7, 0.7, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(12.5);
     doc.setTextColor(INK[0], INK[1], INK[2]);
-    doc.text(kpis[i].v, kx + 3.5, y + 12.2);
+    doc.text(kpis[i].v, kx + 5, y + 13.4);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(6.4);
     doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
-    doc.text(kpis[i].l, kx + 3.5, y + 16.4);
+    doc.text(kpis[i].l, kx + 5, y + 18);
   }
-  y += 27;
+  y += hKpi + 7;
 
   // ===== ANALYSE DES SURFACES =====
-  y = titreSection((FR ? 'Analyse des surfaces' : 'Area analysis') + '   (Gestion SPI = OUI)', y);
-  var cw2 = (UW - 4) / 2, ch = 72;
+  y = titreSection(FR ? 'Analyse des surfaces' : 'Area analysis', y);
+  y = note(FR ? 'Biens en gestion SPI uniquement. Le nombre de biens est rappelé sous chaque surface.'
+              : 'SPI-managed assets only. Asset counts are shown under each area.', y);
+  var cw2 = (UW - 4) / 2, ch = 86;
   carte(M, y, cw2, ch);
   carte(M + cw2 + 4, y, cw2, ch);
   doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
   doc.setTextColor(INK[0], INK[1], INK[2]);
   doc.text(FR ? 'Surfaces acquises / cédées' : 'Acquired / sold areas', M + cw2 / 2, y + 6, { align: 'center' });
   doc.text(FR ? 'Répartition bâti / non bâti' : 'Built / non-built split', M + cw2 + 4 + cw2 / 2, y + 6, { align: 'center' });
-  imageDansBoite(imgAcqCed, M + 4, y + 8.5, cw2 - 8, 43);
-  imageDansBoite(imgBati, M + cw2 + 8, y + 8.5, cw2 - 8, 43);
-  bandeau(M + 4, y + 54, cw2 - 8, [
-    { t: FR ? 'ACQUISITIONS' : 'ACQUIRED', v: _pdfM2(s.surfAcquise), c: [34, 197, 94] },
-    { t: FR ? 'CESSIONS' : 'SOLD', v: _pdfM2(s.surfCedee), c: [217, 119, 6] },
-    { t: FR ? '\u00C9CART' : 'NET', v: _pdfM2(s.surfAcquise + s.surfCedee), c: ROUGE }
+  imageDansBoite(imgAcqCed, M + 4, y + 8.5, cw2 - 8, 52);
+  imageDansBoite(imgBati, M + cw2 + 8, y + 8.5, cw2 - 8, 52);
+  var mot = FR ? ' biens' : ' assets';
+  bandeau(M + 4, y + 63, cw2 - 8, [
+    { t: FR ? 'ACQUISITIONS' : 'ACQUIRED', v: _pdfM2(s.surfAcquise), sub: _pdfNum(s.nbAcqSPI) + mot, c: [34, 197, 94] },
+    { t: FR ? 'CESSIONS' : 'SOLD', v: _pdfM2(s.surfCedee), sub: _pdfNum(s.nbCesSPI) + mot, c: [217, 119, 6] },
+    { t: FR ? 'ÉCART' : 'NET', v: _pdfM2(s.surfAcquise + s.surfCedee), sub: _pdfNum(s.nbAcqSPI + s.nbCesSPI) + mot, c: ROUGE }
   ]);
-  bandeau(M + cw2 + 8, y + 54, cw2 - 8, [
-    { t: FR ? 'B\u00C2TI' : 'BUILT', v: _pdfM2(s.surfBatiSPI), c: [59, 130, 246] },
-    { t: FR ? 'NON B\u00C2TI' : 'NON-BUILT', v: _pdfM2(s.surfNonBatiSPI), c: [34, 197, 94] },
-    { t: 'TOTAL', v: _pdfM2(s.surfBatiSPI + s.surfNonBatiSPI), c: [71, 85, 105] }
+  bandeau(M + cw2 + 8, y + 63, cw2 - 8, [
+    { t: FR ? 'BÂTI' : 'BUILT', v: _pdfM2(s.surfBatiSPI), sub: _pdfNum(s.nbBatiSPI) + mot, c: [59, 130, 246] },
+    { t: FR ? 'NON BÂTI' : 'NON-BUILT', v: _pdfM2(s.surfNonBatiSPI), sub: _pdfNum(s.nbNonBatiSPI) + mot, c: [34, 197, 94] },
+    { t: 'TOTAL', v: _pdfM2(s.surfBatiSPI + s.surfNonBatiSPI), sub: _pdfNum(s.nbAcqSPI + s.nbCesSPI) + mot, c: [71, 85, 105] }
   ]);
   y += ch + 7;
 
   // ===== GESTION SPI =====
+  y = placePour(96, y, TITRE);
   y = titreSection(FR ? 'Gestion SPI' : 'SPI management', y);
-  var wPie = 62, wLine = UW - wPie - 4, hBloc = 74;
+  y = note(FR ? '« SPI » = bien géré par le Service Patrimoine Immobilier. Tout mouvement autre qu\'une cession est compté en acquisition.'
+              : '"SPI" = asset managed by the Real Estate Department. Any movement other than a disposal counts as an acquisition.', y);
+  var wPie = 86, wLine = UW - wPie - 4, hBloc = 78;
   carte(M, y, wPie, hBloc);
   carte(M + wPie + 4, y, wLine, hBloc);
   doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
   doc.setTextColor(INK[0], INK[1], INK[2]);
-  doc.text(FR ? 'Répartition SPI' : 'SPI split', M + wPie / 2, y + 6, { align: 'center' });
-  doc.text(FR ? 'Évolution mensuelle' : 'Monthly trend', M + wPie + 4 + wLine / 2, y + 6, { align: 'center' });
-  imageDansBoite(imgSpiPie, M + 3, y + 9, wPie - 6, hBloc - 32);
-  legende(M + 4, y + hBloc - 17, wPie - 8, [
-    { t: FR ? 'SPI, hors cession' : 'SPI, excl. disposals', c: [22, 101, 52] },
-    { t: FR ? 'Hors SPI, hors cession' : 'Non-SPI, excl. disposals', c: [134, 239, 172] },
-    { t: FR ? 'SPI, cession' : 'SPI, disposal', c: [77, 124, 15] },
-    { t: FR ? 'Hors SPI, cession' : 'Non-SPI, disposal', c: [217, 249, 157] }
-  ], 1);
-  imageDansBoite(imgSpiLine, M + wPie + 7, y + 9, wLine - 8, hBloc - 26);
+  doc.text(FR ? 'Répartition des actes' : 'Acts breakdown', M + wPie / 2, y + 6, { align: 'center' });
+  doc.text(FR ? 'Évolution mensuelle — gestion SPI' : 'Monthly trend — SPI only', M + wPie + 4 + wLine / 2, y + 6, { align: 'center' });
+
+  imageDansBoite(imgSpiPie, M + 3, y + 9, 40, hBloc - 16);
+
+  // Valeurs en grand à droite du camembert : les étiquettes du camembert
+  // tombaient à 2 mm de haut, illisibles une fois imprimées.
+  var totActes = s.spiAcq + s.noSpiAcq + s.spiCes + s.noSpiCes;
+  var rows = [
+    { t: FR ? 'Acquisitions · SPI' : 'Acquisitions · SPI', v: s.spiAcq, c: C_ACQ_SPI },
+    { t: FR ? 'Acquisitions · hors SPI' : 'Acquisitions · non-SPI', v: s.noSpiAcq, c: C_ACQ_HORS },
+    { t: FR ? 'Cessions · SPI' : 'Disposals · SPI', v: s.spiCes, c: C_CES_SPI },
+    { t: FR ? 'Cessions · hors SPI' : 'Disposals · non-SPI', v: s.noSpiCes, c: C_CES_HORS }
+  ];
+  var lx = M + 45, lw2 = wPie - 48, ly = y + 18;
+  for (var i = 0; i < rows.length; i++) {
+    var rgb = _hexRgb(rows[i].c);
+    doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+    doc.roundedRect(lx, ly - 2.6, 2.6, 2.6, 0.6, 0.6, 'F');
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+    doc.setTextColor(71, 85, 105);
+    doc.text(rows[i].t, lx + 4.2, ly);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+    doc.text(_pdfNum(rows[i].v), lx + lw2, ly + 0.4, { align: 'right' });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.2);
+    doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+    doc.text(totActes ? Math.round(100 * rows[i].v / totActes) + ' %' : '—', lx + lw2, ly + 4.4, { align: 'right' });
+    ly += 15;
+  }
+
+  imageDansBoite(imgSpiLine, M + wPie + 7, y + 9, wLine - 8, hBloc - 24);
   legende(M + wPie + 12, y + hBloc - 7, wLine - 18, [
     { t: FR ? 'Acquisitions' : 'Acquisitions', c: [22, 101, 52] },
     { t: FR ? 'Cessions' : 'Disposals', c: [212, 215, 0] },
-    { t: FR ? '\u00C9cart' : 'Net', c: [30, 41, 59] }
+    { t: FR ? 'Écart' : 'Net', c: [30, 41, 59] }
   ], 3);
-  y += hBloc + 6;
+  y += hBloc + 7;
 
-  doc.autoTable({
-    startY: y, margin: { left: M, right: M },
-    head: [[FR ? "Type d'acte" : 'Act type', 'Total', FR ? 'dont gestion SPI' : 'of which SPI']],
-    body: [
-      [FR ? 'Acquisitions' : 'Acquisitions', _pdfNum(s.spiAcq + s.noSpiAcq), _pdfNum(s.spiAcq)],
-      [FR ? 'Cessions' : 'Disposals', _pdfNum(s.spiCes + s.noSpiCes), _pdfNum(s.spiCes)],
-      ['Total', _pdfNum(s.spiAcq + s.noSpiAcq + s.spiCes + s.noSpiCes), _pdfNum(s.spiAcq + s.spiCes)]
-    ],
-    theme: 'plain', styles: { fontSize: 8.5, cellPadding: 2.2, textColor: INK },
-    headStyles: { fillColor: [241, 245, 249], textColor: [71, 85, 105], fontStyle: 'bold', fontSize: 7.5 },
-    columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right', textColor: [22, 163, 74], fontStyle: 'bold' } },
-    didParseCell: function (d) {
-      if (d.column.index > 0) d.cell.styles.halign = 'right';   // l'en-tête doit suivre ses valeurs
-      if (d.section === 'body' && d.row.index === 2) d.cell.styles.fontStyle = 'bold';
-    },
-    didDrawPage: function () {}
-  });
-  y = doc.lastAutoTable.finalY + 8;
+  // ===== RÉPARTITIONS =====
+  y = placePour(42, y, TITRE);
+  var CES = [194, 65, 12], AUTRE = [29, 78, 216];
 
-  // ===== RÉPARTITIONS (page 2) =====
-  doc.addPage();
-  doc.setFillColor(248, 250, 252);
-  doc.rect(0, 0, PW, 16, 'F');
-  doc.setFillColor(ROUGE[0], ROUGE[1], ROUGE[2]);
-  doc.rect(0, 16, PW, 0.8, 'F');
-  var tx2 = M;
-  if (logo) {
-    var l2H = 9, l2W = l2H * (logo.w / logo.h);
-    if (l2W > 30) { l2W = 30; l2H = l2W * (logo.h / logo.w); }
-    doc.addImage(logo.data, logo.fmt, M, (16 - l2H) / 2, l2W, l2H);
-    tx2 = M + l2W + 5;
-  }
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
-  doc.setTextColor(INK[0], INK[1], INK[2]);
-  doc.text(FR ? 'Répartitions' : 'Breakdowns', tx2, 10.5);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
-  doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
-  doc.text(_pdfPeriode(), PW - M, 10.5, { align: 'right' });
-  y = 26;
-
-  /** Table classée avec barre de magnitude : une seule série, donc une seule teinte. */
-  function tableBarres(titre, paires, couleur, yy) {
+  /**
+   * Table classée avec barre empilée à deux segments.
+   *
+   * Une barre unique ne disait que le volume ; la décomposition demandée
+   * (SPI / hors SPI, cessions / reste) se lit directement sur la barre.
+   */
+  function tableBarres(titre, sousTitre, lignes, cA, cB, yy) {
     yy = titreSection(titre, yy);
+    yy = note(sousTitre, yy);
     var maxV = 0;
-    paires.forEach(function (p) { if (p[1] > maxV) maxV = p[1]; });
+    lignes.forEach(function (l) { if (l.total > maxV) maxV = l.total; });
     doc.autoTable({
-      startY: yy, margin: { left: M, right: M },
-      head: [[FR ? 'Libellé' : 'Label', FR ? 'Nombre' : 'Count', '']],
-      body: paires.map(function (p) { return [p[0], _pdfNum(p[1]), '']; }),
-      theme: 'plain', styles: { fontSize: 8.5, cellPadding: 2, textColor: INK },
-      headStyles: { fillColor: [241, 245, 249], textColor: [71, 85, 105], fontStyle: 'bold', fontSize: 7.5 },
+      startY: yy, margin: { left: M, right: M, top: 26 },
+      head: [[FR ? 'Libellé' : 'Label', FR ? 'Total' : 'Total', 'A', 'B', '']],
+      body: lignes.map(function (l) { return [l.label, _pdfNum(l.total), _pdfNum(l.a), _pdfNum(l.b), '']; }),
+      theme: 'plain', styles: { fontSize: 8, cellPadding: 1.9, textColor: INK },
+      // Une table qui déborde créait une page nue : autoTable y réserve la
+      // hauteur de l'en-tête et on le redessine.
+      didDrawPage: function (d) { if (d.pageNumber > 1) enteteSuite(titre); },
+      headStyles: { fillColor: [241, 245, 249], textColor: [71, 85, 105], fontStyle: 'bold', fontSize: 7 },
       alternateRowStyles: { fillColor: [252, 252, 253] },
-      columnStyles: { 0: { cellWidth: 70 }, 1: { cellWidth: 20, halign: 'right', fontStyle: 'bold' }, 2: { cellWidth: UW - 90 } },
+      columnStyles: {
+        0: { cellWidth: 52 },
+        1: { cellWidth: 16, halign: 'right', fontStyle: 'bold' },
+        2: { cellWidth: 18, halign: 'right', textColor: cA },
+        3: { cellWidth: 18, halign: 'right', textColor: cB },
+        4: { cellWidth: UW - 104 }
+      },
+      didParseCell: function (d) {
+        if (d.section !== 'head') return;
+        if (d.column.index === 2) d.cell.text = [lignes.labelA];
+        if (d.column.index === 3) d.cell.text = [lignes.labelB];
+        if (d.column.index > 0) d.cell.styles.halign = 'right';
+      },
       didDrawCell: function (d) {
-        if (d.section !== 'body' || d.column.index !== 2 || !maxV) return;
-        var v = paires[d.row.index][1];
-        var bw = (d.cell.width - 4) * (v / maxV);
-        doc.setFillColor(couleur[0], couleur[1], couleur[2]);
-        doc.roundedRect(d.cell.x + 2, d.cell.y + d.cell.height / 2 - 1.6, Math.max(bw, 0.6), 3.2, 1.2, 1.2, 'F');
+        if (d.section !== 'body' || d.column.index !== 4 || !maxV) return;
+        var l = lignes[d.row.index];
+        var plein = (d.cell.width - 4) * (l.total / maxV);
+        var wA = l.total ? plein * (l.a / l.total) : 0;
+        var bx = d.cell.x + 2, by = d.cell.y + d.cell.height / 2 - 1.6;
+        if (wA > 0.3) { doc.setFillColor(cA[0], cA[1], cA[2]); doc.roundedRect(bx, by, wA, 3.2, 1.2, 1.2, 'F'); }
+        var wB = plein - wA;
+        // 0,6 mm de blanc entre les deux segments : collés, ils formaient une
+        // barre unique dont on ne voyait plus la césure.
+        if (wB > 0.3) { doc.setFillColor(cB[0], cB[1], cB[2]); doc.roundedRect(bx + wA + 0.6, by, Math.max(wB - 0.6, 0.3), 3.2, 1.2, 1.2, 'F'); }
       }
     });
     return doc.lastAutoTable.finalY + 8;
   }
 
-  var mouvPaires = Object.keys(s.mouvementCount)
-    .sort(function (a, b) { return s.mouvementCount[b] - s.mouvementCount[a]; })
-    .map(function (k) { return [k, s.mouvementCount[k]]; });
-  var comPaires = Object.keys(s.communeCount)
-    .sort(function (a, b) { return s.communeCount[b] - s.communeCount[a]; })
-    .slice(0, 10).map(function (k) { return [k, s.communeCount[k]]; });
+  var mouvLignes = Object.keys(s.mouvGroupe)
+    .map(function (k) { var g = s.mouvGroupe[k]; return { label: g.label, total: g.total, a: g.spi, b: g.hors }; })
+    .sort(function (a, b) { return b.total - a.total; });
+  mouvLignes.labelA = FR ? 'SPI' : 'SPI';
+  mouvLignes.labelB = FR ? 'Hors SPI' : 'Non-SPI';
+  var comLignes = Object.keys(s.communeSplit)
+    .map(function (k) { var g = s.communeSplit[k]; return { label: k, total: g.total, a: g.ces, b: g.autre }; })
+    .sort(function (a, b) { return b.total - a.total; })
+    .slice(0, 10);
+  comLignes.labelA = FR ? 'Cessions' : 'Disposals';
+  comLignes.labelB = FR ? 'Autres' : 'Others';
 
-  if (mouvPaires.length) y = tableBarres(FR ? 'Répartition par mouvement' : 'By movement type', mouvPaires, ROUGE, y);
-  if (comPaires.length) {
-    if (y > PH - 70) { doc.addPage(); y = 22; }
-    y = tableBarres(FR ? 'Top 10 des communes' : 'Top 10 municipalities', comPaires, [59, 130, 246], y);
+  if (mouvLignes.length) {
+    y = tableBarres(FR ? 'Répartition par mouvement' : 'By movement type',
+      FR ? 'Libellés regroupés sans tenir compte de la casse ni des accents. La barre sépare les biens gérés par le SPI des autres.'
+         : 'Labels grouped case- and accent-insensitively. The bar splits SPI-managed assets from the rest.',
+      mouvLignes, [29, 78, 216], [148, 163, 184], y);
+  }
+  if (comLignes.length) {
+    y = placePour(42, y, TITRE);
+    y = tableBarres(FR ? 'Top 10 des communes' : 'Top 10 municipalities',
+      FR ? 'La barre sépare les cessions du reste des mouvements.'
+         : 'The bar splits disposals from the other movements.',
+      comLignes, CES, AUTRE, y);
   }
 
   // ===== PIEDS DE PAGE =====
@@ -3907,8 +4028,15 @@ async function exportDashPDF() {
   }
 
   var suffixe = (dashFilterYears.length ? dashFilterYears.slice().sort().join('-') : 'toutes-annees');
-  doc.save(_nomFichierPdf('tableau-de-bord-' + suffixe));
+  doc.save(_nomFichierPdf('mouvement-patrimoine-' + suffixe));
   showToast(FR ? 'PDF généré' : 'PDF generated', 'success');
+}
+
+/** '#rrggbb' -> [r,g,b] pour jsPDF. */
+function _hexRgb(h) {
+  var x = String(h || '').replace('#', '');
+  if (x.length === 3) x = x[0] + x[0] + x[1] + x[1] + x[2] + x[2];
+  return [parseInt(x.slice(0, 2), 16) || 0, parseInt(x.slice(2, 4), 16) || 0, parseInt(x.slice(4, 6), 16) || 0];
 }
 
 // =============================================================================
