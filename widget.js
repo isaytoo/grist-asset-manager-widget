@@ -25,7 +25,7 @@ var currentLang = 'fr';
 // Version affichée en haut à droite. À incrémenter en même temps que le
 // ?v= de index.html : si les deux divergent, l'interface annonce une version
 // que le navigateur n'a pas forcément chargée.
-var WIDGET_VERSION = 'v57';
+var WIDGET_VERSION = 'v58';
 var currentUserEmail = '';
 var userAllowedTabs = []; // Tabs allowed for current user based on BM_Permissions
 var searchPage = 1;
@@ -2931,6 +2931,12 @@ function computeDashStats(filtered) {
     nbAcqSPI: nbAcqSPI, nbCesSPI: nbCesSPI, nbBatiSPI: nbBatiSPI, nbNonBatiSPI: nbNonBatiSPI,
     nbSPI: nbSPI, nbHors: nbHors,
     communesSPI: Object.keys(communesSPISet).length, communesHors: Object.keys(communesHorsSet).length,
+    // Trois parts qui s'additionnent. « SPI » et « hors SPI » se chevauchent sur
+    // les communes mixtes : affichés tels quels, leur somme dépassait le total
+    // et donnait à lire une erreur de calcul.
+    communesSPIseul: Object.keys(communesSPISet).filter(function (c) { return !communesHorsSet[c]; }).length,
+    communesHorsSeul: Object.keys(communesHorsSet).filter(function (c) { return !communesSPISet[c]; }).length,
+    communesMixtes: Object.keys(communesSPISet).filter(function (c) { return communesHorsSet[c]; }).length,
     absParcSPI: absParcSPI, absParcHors: absParcHors, absBatiSPI: absBatiSPI, absBatiHors: absBatiHors };
 }
 
@@ -2976,24 +2982,30 @@ function renderDashboardView() {
   var nb = function (v) { return Number(v).toLocaleString(); };
   var lSPI = currentLang === 'fr' ? 'Gestion SPI' : 'SPI-managed';
   var lHors = currentLang === 'fr' ? 'Hors SPI' : 'Non-SPI';
-  function statCard(valeur, libelle, vSPI, vHors) {
-    return '<div class="stat-card"><div class="stat-value">' + valeur + '</div>'
-      + '<div class="stat-label">' + libelle + '</div>'
-      + '<div class="stat-split">'
-      + '<div><span>' + lSPI + '</span><b>' + vSPI + '</b></div>'
-      + '<div><span>' + lHors + '</span><b>' + vHors + '</b></div>'
-      + '</div></div>';
+  // Les lignes d'une carte s'additionnent toujours jusqu'au total affiché :
+  // un lecteur doit pouvoir vérifier l'addition de tête.
+  function statCard(valeur, libelle, lignes) {
+    var h = '<div class="stat-card"><div class="stat-value">' + valeur + '</div>'
+      + '<div class="stat-label">' + libelle + '</div><div class="stat-split">';
+    for (var k = 0; k < lignes.length; k++) {
+      h += '<div><span>' + lignes[k][0] + '</span><b>' + lignes[k][1] + '</b></div>';
+    }
+    return h + '</div></div>';
   }
+  var cSeul = currentLang === 'fr' ? 'SPI uniquement' : 'SPI only';
+  var cHorsSeul = currentLang === 'fr' ? 'Hors SPI uniquement' : 'Non-SPI only';
+  var cDeux = currentLang === 'fr' ? 'Les deux' : 'Both';
   html += '<div class="stats-row">';
-  html += statCard(nb(totalBiens), t('totalBiens'), nb(_st.nbSPI), nb(_st.nbHors));
-  html += statCard(nb(Object.keys(communesSet).length), t('totalCommunes'), nb(_st.communesSPI), nb(_st.communesHors));
-  html += statCard(m2(surfaceParcelle), t('totalSurfaceParcelle'), m2(_st.absParcSPI), m2(_st.absParcHors));
-  html += statCard(m2(surfaceBati), t('totalSurfaceBati'), m2(_st.absBatiSPI), m2(_st.absBatiHors));
+  html += statCard(nb(totalBiens), t('totalBiens'), [[lSPI, nb(_st.nbSPI)], [lHors, nb(_st.nbHors)]]);
+  html += statCard(nb(Object.keys(communesSet).length), t('totalCommunes'),
+    [[cSeul, nb(_st.communesSPIseul)], [cHorsSeul, nb(_st.communesHorsSeul)], [cDeux, nb(_st.communesMixtes)]]);
+  html += statCard(m2(surfaceParcelle), t('totalSurfaceParcelle'), [[lSPI, m2(_st.absParcSPI)], [lHors, m2(_st.absParcHors)]]);
+  html += statCard(m2(surfaceBati), t('totalSurfaceBati'), [[lSPI, m2(_st.absBatiSPI)], [lHors, m2(_st.absBatiHors)]]);
   html += '</div>';
   html += '<p style="font-size:11px;color:#94a3b8;margin:-14px 0 20px;">'
     + (currentLang === 'fr'
-        ? 'Tous biens confondus. Surfaces cumulées en valeur absolue : une cession s\'ajoute, elle ne se retranche pas. Une commune ayant des biens des deux côtés compte dans les deux lignes.'
-        : 'All assets. Areas are absolute sums: a disposal adds up, it does not subtract. A municipality with assets on both sides counts in both rows.')
+        ? 'Tous biens confondus, gestion SPI et hors SPI. Les surfaces sont cumulées en valeur absolue : une cession s\'ajoute, elle ne se retranche pas.'
+        : 'All assets, SPI-managed and not. Areas are absolute sums: a disposal adds up, it does not subtract.')
     + '</p>';
 
   // ===== Filtres temporels =====
@@ -3883,7 +3895,7 @@ async function exportDashPDF() {
   // chiffres portent sur tous les biens, alors que l'analyse des surfaces
   // juste en dessous ne retient que le SPI. Sans la ventilation, on croyait
   // à une incohérence entre les deux sections.
-  var hKpi = 34;
+  var hKpi = 37;
   doc.setFillColor(FOND[0], FOND[1], FOND[2]);
   doc.setDrawColor(LINE[0], LINE[1], LINE[2]); doc.setLineWidth(0.3);
   doc.roundedRect(M, y, UW, hKpi, 2.5, 2.5, 'FD');
@@ -3891,13 +3903,15 @@ async function exportDashPDF() {
   var lHors = FR ? 'Hors SPI' : 'Non-SPI';
   var kpis = [
     { v: _pdfNum(s.totalBiens), l: FR ? 'BIENS' : 'ASSETS', c: ROUGE,
-      a: _pdfNum(s.nbSPI), b: _pdfNum(s.nbHors) },
+      r: [[lSPI, _pdfNum(s.nbSPI)], [lHors, _pdfNum(s.nbHors)]] },
     { v: _pdfNum(Object.keys(s.communesSet).length), l: 'COMMUNES', c: [59, 130, 246],
-      a: _pdfNum(s.communesSPI), b: _pdfNum(s.communesHors) },
+      r: [[FR ? 'SPI uniquement' : 'SPI only', _pdfNum(s.communesSPIseul)],
+          [FR ? 'Hors SPI uniquement' : 'Non-SPI only', _pdfNum(s.communesHorsSeul)],
+          [FR ? 'Les deux' : 'Both', _pdfNum(s.communesMixtes)]] },
     { v: _pdfM2(s.surfaceParcelle), l: FR ? 'SURFACE PARCELLE' : 'PARCEL AREA', c: [34, 197, 94],
-      a: _pdfM2(s.absParcSPI), b: _pdfM2(s.absParcHors) },
+      r: [[lSPI, _pdfM2(s.absParcSPI)], [lHors, _pdfM2(s.absParcHors)]] },
     { v: _pdfM2(s.surfaceBati), l: FR ? 'SURFACE BÂTIE' : 'BUILT AREA', c: [217, 119, 6],
-      a: _pdfM2(s.absBatiSPI), b: _pdfM2(s.absBatiHors) }
+      r: [[lSPI, _pdfM2(s.absBatiSPI)], [lHors, _pdfM2(s.absBatiHors)]] }
   ];
   var kw = UW / 4;
   for (var i = 0; i < kpis.length; i++) {
@@ -3913,19 +3927,19 @@ async function exportDashPDF() {
     doc.text(kpis[i].l, kx + 5, y + 17.8);
     doc.setDrawColor(LINE[0], LINE[1], LINE[2]);
     doc.line(kx + 5, y + 20.4, kd, y + 20.4);
-    doc.setFontSize(6.2);
-    doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
-    doc.text(lSPI, kx + 5, y + 25);
-    doc.text(lHors, kx + 5, y + 30);
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(7);
-    doc.setTextColor(INK[0], INK[1], INK[2]);
-    doc.text(kpis[i].a, kd, y + 25, { align: 'right' });
-    doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
-    doc.text(kpis[i].b, kd, y + 30, { align: 'right' });
+    for (var k = 0; k < kpis[i].r.length; k++) {
+      var ry = y + 24.6 + k * 4.4;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(6.2);
+      doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+      doc.text(kpis[i].r[k][0], kx + 5, ry);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(7);
+      doc.setTextColor(k === 0 ? INK[0] : MUTED[0], k === 0 ? INK[1] : MUTED[1], k === 0 ? INK[2] : MUTED[2]);
+      doc.text(kpis[i].r[k][1], kd, ry, { align: 'right' });
+    }
   }
   y += hKpi + 2.5;
-  y = note(FR ? 'Tous biens confondus. Surfaces cumulées en valeur absolue : une cession s\'ajoute, elle ne se retranche pas. Une commune ayant des biens des deux côtés compte dans les deux lignes.'
-              : 'All assets. Areas are absolute sums: a disposal adds up, it does not subtract. A municipality with assets on both sides counts in both rows.', y) + 2.5;
+  y = note(FR ? 'Tous biens confondus, gestion SPI et hors SPI. Les surfaces sont cumulées en valeur absolue : une cession s\'ajoute, elle ne se retranche pas.'
+              : 'All assets, SPI-managed and not. Areas are absolute sums: a disposal adds up, it does not subtract.', y) + 2.5;
 
   // ===== ANALYSE DES SURFACES =====
   y = titreSection(FR ? 'Analyse des surfaces' : 'Area analysis', y);
