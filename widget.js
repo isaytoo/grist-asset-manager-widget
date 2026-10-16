@@ -25,7 +25,7 @@ var currentLang = 'fr';
 // Version affichée en haut à droite. À incrémenter en même temps que le
 // ?v= de index.html : si les deux divergent, l'interface annonce une version
 // que le navigateur n'a pas forcément chargée.
-var WIDGET_VERSION = 'v56';
+var WIDGET_VERSION = 'v57';
 var currentUserEmail = '';
 var userAllowedTabs = []; // Tabs allowed for current user based on BM_Permissions
 var searchPage = 1;
@@ -2846,6 +2846,12 @@ function computeDashStats(filtered) {
   var mouvGroupe = {};
   var communeSplit = {};
   var nbAcqSPI = 0, nbCesSPI = 0, nbBatiSPI = 0, nbNonBatiSPI = 0;
+  // Ventilation SPI / hors SPI des quatre indicateurs de tête. Ils portaient sur
+  // tous les biens sans le dire, juste au-dessus d'une analyse des surfaces
+  // limitée au SPI : les deux chiffres ne se rapprochaient pas.
+  var nbSPI = 0, nbHors = 0;
+  var communesSPISet = {}, communesHorsSet = {};
+  var absParcSPI = 0, absParcHors = 0, absBatiSPI = 0, absBatiHors = 0;
   var surfaceParcelle = 0;
   var surfaceBati = 0;
   var mouvementCount = {};
@@ -2859,11 +2865,20 @@ function computeDashStats(filtered) {
 
   for (var i = 0; i < filtered.length; i++) {
     var b = filtered[i];
-    if (b.Commune) { communesSet[b.Commune] = true; communeCount[b.Commune] = (communeCount[b.Commune] || 0) + 1; }
+    var estSPI = String(b.Gestion_SPI || '').toUpperCase() === 'OUI';
+    if (estSPI) nbSPI++; else nbHors++;
+    if (b.Commune) {
+      communesSet[b.Commune] = true; communeCount[b.Commune] = (communeCount[b.Commune] || 0) + 1;
+      // Une commune peut porter des biens des deux côtés : elle compte alors
+      // dans les deux ensembles, dont la somme dépasse le total. C'est voulu.
+      if (estSPI) communesSPISet[b.Commune] = true; else communesHorsSet[b.Commune] = true;
+    }
     var sp = parseNum(b.Surface_Parcelle);
     var sb = parseNum(b.Surface_Bati);
     surfaceParcelle += Math.abs(sp);
     surfaceBati += Math.abs(sb);
+    if (estSPI) { absParcSPI += Math.abs(sp); absBatiSPI += Math.abs(sb); }
+    else { absParcHors += Math.abs(sp); absBatiHors += Math.abs(sb); }
     if (b.Mouvement) mouvementCount[b.Mouvement] = (mouvementCount[b.Mouvement] || 0) + 1;
 
     var mouv = String(b.Mouvement || '').toUpperCase();
@@ -2913,7 +2928,10 @@ function computeDashStats(filtered) {
     spiAcq: spiAcq, spiCes: spiCes, noSpiAcq: noSpiAcq, noSpiCes: noSpiCes,
     surfAcquise: surfAcquise, surfCedee: surfCedee, surfBatiSPI: surfBatiSPI, surfNonBatiSPI: surfNonBatiSPI,
     mouvGroupe: mouvGroupe, communeSplit: communeSplit,
-    nbAcqSPI: nbAcqSPI, nbCesSPI: nbCesSPI, nbBatiSPI: nbBatiSPI, nbNonBatiSPI: nbNonBatiSPI };
+    nbAcqSPI: nbAcqSPI, nbCesSPI: nbCesSPI, nbBatiSPI: nbBatiSPI, nbNonBatiSPI: nbNonBatiSPI,
+    nbSPI: nbSPI, nbHors: nbHors,
+    communesSPI: Object.keys(communesSPISet).length, communesHors: Object.keys(communesHorsSet).length,
+    absParcSPI: absParcSPI, absParcHors: absParcHors, absBatiSPI: absBatiSPI, absBatiHors: absBatiHors };
 }
 
 function renderDashboardView() {
@@ -2951,12 +2969,32 @@ function renderDashboardView() {
   html += '</div>';
 
   // Stats cards
+  // Chaque indicateur est ventilé SPI / hors SPI : il porte sur tous les biens,
+  // alors que l'analyse des surfaces plus bas ne retient que le SPI. Les deux
+  // chiffres ne se rapprochaient pas et on y lisait une incohérence.
+  var m2 = function (v) { return Math.round(v).toLocaleString() + ' m²'; };
+  var nb = function (v) { return Number(v).toLocaleString(); };
+  var lSPI = currentLang === 'fr' ? 'Gestion SPI' : 'SPI-managed';
+  var lHors = currentLang === 'fr' ? 'Hors SPI' : 'Non-SPI';
+  function statCard(valeur, libelle, vSPI, vHors) {
+    return '<div class="stat-card"><div class="stat-value">' + valeur + '</div>'
+      + '<div class="stat-label">' + libelle + '</div>'
+      + '<div class="stat-split">'
+      + '<div><span>' + lSPI + '</span><b>' + vSPI + '</b></div>'
+      + '<div><span>' + lHors + '</span><b>' + vHors + '</b></div>'
+      + '</div></div>';
+  }
   html += '<div class="stats-row">';
-  html += '<div class="stat-card"><div class="stat-value">' + totalBiens.toLocaleString() + '</div><div class="stat-label">' + t('totalBiens') + '</div></div>';
-  html += '<div class="stat-card"><div class="stat-value">' + Object.keys(communesSet).length + '</div><div class="stat-label">' + t('totalCommunes') + '</div></div>';
-  html += '<div class="stat-card"><div class="stat-value">' + Math.round(surfaceParcelle).toLocaleString() + ' m²</div><div class="stat-label">' + t('totalSurfaceParcelle') + '</div></div>';
-  html += '<div class="stat-card"><div class="stat-value">' + Math.round(surfaceBati).toLocaleString() + ' m²</div><div class="stat-label">' + t('totalSurfaceBati') + '</div></div>';
+  html += statCard(nb(totalBiens), t('totalBiens'), nb(_st.nbSPI), nb(_st.nbHors));
+  html += statCard(nb(Object.keys(communesSet).length), t('totalCommunes'), nb(_st.communesSPI), nb(_st.communesHors));
+  html += statCard(m2(surfaceParcelle), t('totalSurfaceParcelle'), m2(_st.absParcSPI), m2(_st.absParcHors));
+  html += statCard(m2(surfaceBati), t('totalSurfaceBati'), m2(_st.absBatiSPI), m2(_st.absBatiHors));
   html += '</div>';
+  html += '<p style="font-size:11px;color:#94a3b8;margin:-14px 0 20px;">'
+    + (currentLang === 'fr'
+        ? 'Tous biens confondus. Surfaces cumulées en valeur absolue : une cession s\'ajoute, elle ne se retranche pas. Une commune ayant des biens des deux côtés compte dans les deux lignes.'
+        : 'All assets. Areas are absolute sums: a disposal adds up, it does not subtract. A municipality with assets on both sides counts in both rows.')
+    + '</p>';
 
   // ===== Filtres temporels =====
   html += '<div class="section-card" style="margin-top:20px;">';
@@ -3726,12 +3764,18 @@ async function exportDashPDF() {
     doc.text(txt, M + 4.5, yy);
     return yy + 5.5;
   }
-  /** Note explicative sous un titre de section. */
+  /**
+   * Note explicative sous un titre de section.
+   *
+   * Passe à la ligne plutôt que de déborder : la note des indicateurs sortait
+   * de la page et perdait ses derniers mots.
+   */
   function note(txt, yy) {
     doc.setFont('helvetica', 'normal'); doc.setFontSize(6.8);
     doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
-    doc.text(txt, M + 4.5, yy);
-    return yy + 4;
+    var lignes = doc.splitTextToSize(txt, UW - 4.5);
+    for (var k = 0; k < lignes.length; k++) doc.text(lignes[k], M + 4.5, yy + k * 3.2);
+    return yy + (lignes.length - 1) * 3.2 + 4;
   }
   function imageDansBoite(img, bx, by, bw, bh) {
     if (!img) {
@@ -3834,20 +3878,30 @@ async function exportDashPDF() {
 
   var y = 37;
 
-  // ===== INDICATEURS, sur un panneau coloré pour les détacher du reste =====
-  var hKpi = 23;
+  // ===== INDICATEURS =====
+  // Panneau coloré pour les détacher, et ventilation SPI / hors SPI : ces
+  // chiffres portent sur tous les biens, alors que l'analyse des surfaces
+  // juste en dessous ne retient que le SPI. Sans la ventilation, on croyait
+  // à une incohérence entre les deux sections.
+  var hKpi = 34;
   doc.setFillColor(FOND[0], FOND[1], FOND[2]);
   doc.setDrawColor(LINE[0], LINE[1], LINE[2]); doc.setLineWidth(0.3);
   doc.roundedRect(M, y, UW, hKpi, 2.5, 2.5, 'FD');
+  var lSPI = FR ? 'Gestion SPI' : 'SPI-managed';
+  var lHors = FR ? 'Hors SPI' : 'Non-SPI';
   var kpis = [
-    { v: _pdfNum(s.totalBiens), l: FR ? 'BIENS' : 'ASSETS', c: ROUGE },
-    { v: _pdfNum(Object.keys(s.communesSet).length), l: 'COMMUNES', c: [59, 130, 246] },
-    { v: _pdfM2(s.surfaceParcelle), l: FR ? 'SURFACE PARCELLE' : 'PARCEL AREA', c: [34, 197, 94] },
-    { v: _pdfM2(s.surfaceBati), l: FR ? 'SURFACE BÂTIE' : 'BUILT AREA', c: [217, 119, 6] }
+    { v: _pdfNum(s.totalBiens), l: FR ? 'BIENS' : 'ASSETS', c: ROUGE,
+      a: _pdfNum(s.nbSPI), b: _pdfNum(s.nbHors) },
+    { v: _pdfNum(Object.keys(s.communesSet).length), l: 'COMMUNES', c: [59, 130, 246],
+      a: _pdfNum(s.communesSPI), b: _pdfNum(s.communesHors) },
+    { v: _pdfM2(s.surfaceParcelle), l: FR ? 'SURFACE PARCELLE' : 'PARCEL AREA', c: [34, 197, 94],
+      a: _pdfM2(s.absParcSPI), b: _pdfM2(s.absParcHors) },
+    { v: _pdfM2(s.surfaceBati), l: FR ? 'SURFACE BÂTIE' : 'BUILT AREA', c: [217, 119, 6],
+      a: _pdfM2(s.absBatiSPI), b: _pdfM2(s.absBatiHors) }
   ];
   var kw = UW / 4;
   for (var i = 0; i < kpis.length; i++) {
-    var kx = M + i * kw;
+    var kx = M + i * kw, kd = kx + kw - 5;
     if (i) { doc.setDrawColor(LINE[0], LINE[1], LINE[2]); doc.line(kx, y + 4, kx, y + hKpi - 4); }
     doc.setFillColor(kpis[i].c[0], kpis[i].c[1], kpis[i].c[2]);
     doc.roundedRect(kx + 5, y + 4.6, 6, 1.4, 0.7, 0.7, 'F');
@@ -3856,30 +3910,43 @@ async function exportDashPDF() {
     doc.text(kpis[i].v, kx + 5, y + 13.4);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(6.4);
     doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
-    doc.text(kpis[i].l, kx + 5, y + 18);
+    doc.text(kpis[i].l, kx + 5, y + 17.8);
+    doc.setDrawColor(LINE[0], LINE[1], LINE[2]);
+    doc.line(kx + 5, y + 20.4, kd, y + 20.4);
+    doc.setFontSize(6.2);
+    doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+    doc.text(lSPI, kx + 5, y + 25);
+    doc.text(lHors, kx + 5, y + 30);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7);
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+    doc.text(kpis[i].a, kd, y + 25, { align: 'right' });
+    doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+    doc.text(kpis[i].b, kd, y + 30, { align: 'right' });
   }
-  y += hKpi + 7;
+  y += hKpi + 2.5;
+  y = note(FR ? 'Tous biens confondus. Surfaces cumulées en valeur absolue : une cession s\'ajoute, elle ne se retranche pas. Une commune ayant des biens des deux côtés compte dans les deux lignes.'
+              : 'All assets. Areas are absolute sums: a disposal adds up, it does not subtract. A municipality with assets on both sides counts in both rows.', y) + 2.5;
 
   // ===== ANALYSE DES SURFACES =====
   y = titreSection(FR ? 'Analyse des surfaces' : 'Area analysis', y);
   y = note(FR ? 'Biens en gestion SPI uniquement. Le nombre de biens est rappelé sous chaque surface.'
               : 'SPI-managed assets only. Asset counts are shown under each area.', y);
-  var cw2 = (UW - 4) / 2, ch = 86;
+  var cw2 = (UW - 4) / 2, ch = 80;
   carte(M, y, cw2, ch);
   carte(M + cw2 + 4, y, cw2, ch);
   doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
   doc.setTextColor(INK[0], INK[1], INK[2]);
   doc.text(FR ? 'Surfaces acquises / cédées' : 'Acquired / sold areas', M + cw2 / 2, y + 6, { align: 'center' });
   doc.text(FR ? 'Répartition bâti / non bâti' : 'Built / non-built split', M + cw2 + 4 + cw2 / 2, y + 6, { align: 'center' });
-  imageDansBoite(imgAcqCed, M + 4, y + 8.5, cw2 - 8, 52);
-  imageDansBoite(imgBati, M + cw2 + 8, y + 8.5, cw2 - 8, 52);
+  imageDansBoite(imgAcqCed, M + 4, y + 8.5, cw2 - 8, 48);
+  imageDansBoite(imgBati, M + cw2 + 8, y + 8.5, cw2 - 8, 48);
   var mot = FR ? ' biens' : ' assets';
-  bandeau(M + 4, y + 63, cw2 - 8, [
+  bandeau(M + 4, y + 58, cw2 - 8, [
     { t: FR ? 'ACQUISITIONS' : 'ACQUIRED', v: _pdfM2(s.surfAcquise), sub: _pdfNum(s.nbAcqSPI) + mot, c: [34, 197, 94] },
     { t: FR ? 'CESSIONS' : 'SOLD', v: _pdfM2(s.surfCedee), sub: _pdfNum(s.nbCesSPI) + mot, c: [217, 119, 6] },
     { t: FR ? 'ÉCART' : 'NET', v: _pdfM2(s.surfAcquise + s.surfCedee), sub: _pdfNum(s.nbAcqSPI + s.nbCesSPI) + mot, c: ROUGE }
   ]);
-  bandeau(M + cw2 + 8, y + 63, cw2 - 8, [
+  bandeau(M + cw2 + 8, y + 58, cw2 - 8, [
     { t: FR ? 'BÂTI' : 'BUILT', v: _pdfM2(s.surfBatiSPI), sub: _pdfNum(s.nbBatiSPI) + mot, c: [59, 130, 246] },
     { t: FR ? 'NON BÂTI' : 'NON-BUILT', v: _pdfM2(s.surfNonBatiSPI), sub: _pdfNum(s.nbNonBatiSPI) + mot, c: [34, 197, 94] },
     { t: 'TOTAL', v: _pdfM2(s.surfBatiSPI + s.surfNonBatiSPI), sub: _pdfNum(s.nbAcqSPI + s.nbCesSPI) + mot, c: [71, 85, 105] }
